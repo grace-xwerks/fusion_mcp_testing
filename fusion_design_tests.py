@@ -318,8 +318,12 @@ def run(_context: str):
     des  = adsk.fusion.Design.cast(app.activeProduct)
     root = des.rootComponent
 
-    # Create a new empty component
-    occ = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
+    # Create a new empty component translated +X past the Bracket so the
+    # two parts don't overlap in the assembly view.
+    offset_x = 12.0   # cm — beyond Bracket length (10 cm) + small gap
+    placement = adsk.core.Matrix3D.create()
+    placement.translation = adsk.core.Vector3D.create(offset_x, 0, 0)
+    occ = root.occurrences.addNewComponent(placement)
     comp = occ.component
     comp.name = "MountingPlate"
     print(f"New sub-component: {comp.name}")
