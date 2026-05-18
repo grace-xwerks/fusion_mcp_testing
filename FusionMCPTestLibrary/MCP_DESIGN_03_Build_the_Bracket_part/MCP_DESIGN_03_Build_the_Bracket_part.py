@@ -57,29 +57,23 @@ def run(_context: str):
     pk_l  = L - 2*wall
     pk_w  = W - 2*wall
 
-    # Sketch on the top face (Z = H)
-    top_face = None
-    for face in body.faces:
-        if abs(face.centroid.z - H) < 0.001:
-            bbox = face.boundingBox
-            if (bbox.maxPoint.x - bbox.minPoint.x) > 0.9 * L:
-                top_face = face
-                break
+    # Quirk: in Fusion 2703.x, a CutFeature whose sketch sits on a body face
+    # silently fails when its extent is a DistanceExtentDefinition — it returns
+    # 0 faces and removes no volume (ThroughAll works fine on a face, but
+    # fixed-depth does not). Workaround: sketch on a construction plane
+    # offset to the same Z as the top face.
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(H))
+    pocket_plane = root.constructionPlanes.add(cpi)
+    pocket_plane.name = "Plane_Pocket"
 
-    sk_pocket = root.sketches.add(top_face)
+    sk_pocket = root.sketches.add(pocket_plane)
     sk_pocket.name = "Sketch_Pocket"
-    lines = sk_pocket.sketchCurves.sketchLines
-    lines.addTwoPointRectangle(
-        adsk.core.Point3D.create(wall, wall, H),
-        adsk.core.Point3D.create(wall+pk_l, wall+pk_w, H)
+    sk_pocket.sketchCurves.sketchLines.addTwoPointRectangle(
+        adsk.core.Point3D.create(wall, wall, 0),
+        adsk.core.Point3D.create(wall+pk_l, wall+pk_w, 0)
     )
-
     # Fillet the pocket sketch corners (inside corner radius = CR)
-    arcs    = sk_pocket.sketchCurves.sketchArcs
-    corners = sk_pocket.sketchPoints
-    # Use sketch fillets via the sketch API
-    sk_pocket.sketchCurves  # trigger lazy load
-    # Add fillets to all 4 corner pairs
     segs = list(sk_pocket.sketchCurves.sketchLines)
     for i in range(4):
         l1 = segs[i]
@@ -89,16 +83,9 @@ def run(_context: str):
             l2, l2.startSketchPoint.geometry,
             CR
         )
-
-    # Sketching a rectangle on a face creates 2 profiles (inner + outer face
-    # region). Pick the smaller one — the actual pocket.
-    inner_pocket = None
-    for i in range(sk_pocket.profiles.count):
-        pr = sk_pocket.profiles.item(i)
-        bb = pr.boundingBox
-        if (bb.maxPoint.x - bb.minPoint.x) < L * 0.95:
-            inner_pocket = pr
-            break
+    # Sketched on a construction plane: there's exactly one profile (the
+    # filleted rectangle). No outer-region profile to filter out.
+    inner_pocket = sk_pocket.profiles.item(0)
     pocket_ext_in = root.features.extrudeFeatures.createInput(
         inner_pocket,
         adsk.fusion.FeatureOperations.CutFeatureOperation
@@ -121,6 +108,15 @@ def run(_context: str):
         (hole_inset,       W - hole_inset  ),
         (L - hole_inset,   W - hole_inset  ),
     ]
+
+    # Re-find the top face after the pocket cut altered the body topology.
+    top_face = None
+    for face in body.faces:
+        if abs(face.centroid.z - H) < 0.001:
+            bbox = face.boundingBox
+            if (bbox.maxPoint.x - bbox.minPoint.x) > 0.9 * L:
+                top_face = face
+                break
 
     sk_holes = root.sketches.add(top_face)
     sk_holes.name = "Sketch_Holes"
