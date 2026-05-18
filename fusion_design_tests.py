@@ -340,3 +340,339 @@ def run(_context: str):
     print(f"  Body added: 120 x 80 x 5 mm plate")
     print(f"  Root occurrences: {root.occurrences.count}")
     print(f"  Assembly is now multi-component — verify in browser tree.")
+
+
+# =============================================================================
+# DESIGN-07 — Hole feature (proper HoleFeatures API): simple + counterbore
+#             Demonstrates the dedicated HoleFeatureInput rather than
+#             extrude-cut. Run AFTER DESIGN-03 (needs the Bracket body).
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    body = next((b for b in root.bRepBodies if b.name == "Bracket"), None)
+    if body is None:
+        print("Bracket not found. Run DESIGN-03 first.")
+        return
+
+    H = des.userParameters.itemByName("part_height").value   # 2 cm
+
+    # Quirk #8 applies to HoleFeatures too: sketch points placed on a body
+    # face cause the hole to silently no-op. Sketch the drill points on a
+    # construction plane offset to the top instead.
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(H))
+    drill_plane = root.constructionPlanes.add(cpi)
+    drill_plane.name = "Plane_HoleSeed"
+    sk = root.sketches.add(drill_plane)
+    sk.name = "Sketch_HolePoints"
+    pt_drill = sk.sketchPoints.add(adsk.core.Point3D.create(5.0, 0.75, 0))
+    pt_cbore = sk.sketchPoints.add(adsk.core.Point3D.create(5.0, 5.25, 0))
+
+    holes = root.features.holeFeatures
+    vol0 = body.volume
+
+    # ── Simple drilled hole: Ø5 mm × 10 mm deep ───────────────────────────────
+    simple_in = holes.createSimpleInput(adsk.core.ValueInput.createByReal(0.5))
+    simple_in.participantBodies = [body]
+    simple_in.setPositionBySketchPoint(pt_drill)
+    simple_in.setDistanceExtent(adsk.core.ValueInput.createByReal(1.0))
+    drilled = holes.add(simple_in)
+    drilled.name = "Drilled_5mm"
+    print(f"Drilled Ø5 mm × 10 mm at (50, 7.5, top): "
+          f"faces={drilled.faces.count} Δvol={vol0 - body.volume:+.3f} cm³")
+    vol1 = body.volume
+
+    # ── Counterbored hole: Ø4 mm shaft, Ø8 mm × 3 mm cbore, 15 mm deep ────────
+    cbore_in = holes.createCounterboreInput(
+        adsk.core.ValueInput.createByReal(0.4),    # hole Ø  = 4 mm
+        adsk.core.ValueInput.createByReal(0.8),    # cbore Ø = 8 mm
+        adsk.core.ValueInput.createByReal(0.3),    # cbore depth = 3 mm
+    )
+    cbore_in.participantBodies = [body]
+    cbore_in.setPositionBySketchPoint(pt_cbore)
+    cbore_in.setDistanceExtent(adsk.core.ValueInput.createByReal(1.5))
+    cbored = holes.add(cbore_in)
+    cbored.name = "Counterbore_M4"
+    print(f"Counterbore Ø4 mm × 15 mm with Ø8 mm × 3 mm at (50, 52.5, top): "
+          f"faces={cbored.faces.count} Δvol={vol1 - body.volume:+.3f} cm³")
+
+    print(f"\nTotal hole features: {holes.count}  body faces: {body.faces.count}  "
+          f"final vol: {body.volume:.3f} cm³")
+
+
+# =============================================================================
+# DESIGN-08 — Rectangular pattern of a feature
+#             Creates a small boss on the Bracket, then patterns it 2×3.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    body = next((b for b in root.bRepBodies if b.name == "Bracket"), None)
+    if body is None:
+        print("Bracket not found. Run DESIGN-03 first.")
+        return
+
+    H = des.userParameters.itemByName("part_height").value
+
+    # Sketch a small 3×3 mm boss on a construction plane at top
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(H))
+    plane = root.constructionPlanes.add(cpi)
+    plane.name = "Plane_PatternSeed"
+    sk = root.sketches.add(plane)
+    sk.name = "Sketch_BossSeed"
+    # Seed boss placed on the front-rim (Y < pocket inner edge of 1.5 cm).
+    # Y spacing of 5 cm puts the second pattern row on the back rim (Y > 4.5),
+    # so all 6 instances actually join material instead of floating over the
+    # pocket.
+    sk.sketchCurves.sketchLines.addTwoPointRectangle(
+        adsk.core.Point3D.create(0.5, 0.5, 0),
+        adsk.core.Point3D.create(0.8, 0.8, 0),
+    )
+    ein = root.features.extrudeFeatures.createInput(
+        sk.profiles.item(0), adsk.fusion.FeatureOperations.JoinFeatureOperation)
+    ein.participantBodies = [body]
+    ein.setOneSideExtent(
+        adsk.fusion.DistanceExtentDefinition.create(
+            adsk.core.ValueInput.createByReal(0.2)),
+        adsk.fusion.ExtentDirections.PositiveExtentDirection)
+    seed = root.features.extrudeFeatures.add(ein)
+    seed.name = "BossSeed"
+    print(f"Seed boss extruded (+Z 2 mm, 3×3 mm), body faces now {body.faces.count}")
+
+    # Rectangular pattern: 3 along X (spacing 4 cm), 2 along Y (spacing 5 cm)
+    input_set = adsk.core.ObjectCollection.create()
+    input_set.add(seed)
+    pat_in = root.features.rectangularPatternFeatures.createInput(
+        input_set,
+        root.xConstructionAxis,
+        adsk.core.ValueInput.createByReal(3),
+        adsk.core.ValueInput.createByReal(4.0),
+        adsk.fusion.PatternDistanceType.SpacingPatternDistanceType,
+    )
+    pat_in.setDirectionTwo(
+        root.yConstructionAxis,
+        adsk.core.ValueInput.createByReal(2),
+        adsk.core.ValueInput.createByReal(5.0),
+    )
+    pat = root.features.rectangularPatternFeatures.add(pat_in)
+    pat.name = "Pattern_Bosses_3x2"
+    print(f"Rectangular pattern: 3×2, spacing 20 mm × 40 mm")
+    print(f"Body faces now: {body.faces.count}  vol: {body.volume:.3f} cm³")
+
+
+# =============================================================================
+# DESIGN-09 — Circular pattern of a feature around an axis
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    body = next((b for b in root.bRepBodies if b.name == "Bracket"), None)
+    if body is None:
+        print("Bracket not found. Run DESIGN-03 first.")
+        return
+
+    H = des.userParameters.itemByName("part_height").value
+
+    # Tiny pin on the front rim, offset from the part center so the circular
+    # pattern produces an interesting fan of pins. (1.5, 0.75) avoids the
+    # existing M5 drill at (5, 0.75) added by DESIGN-07.
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(H))
+    plane = root.constructionPlanes.add(cpi); plane.name = "Plane_CircPatternSeed"
+    sk = root.sketches.add(plane); sk.name = "Sketch_PinSeed"
+    sk.sketchCurves.sketchCircles.addByCenterRadius(
+        adsk.core.Point3D.create(1.5, 0.75, 0), 0.15)   # 3 mm Ø pin
+    ein = root.features.extrudeFeatures.createInput(
+        sk.profiles.item(0), adsk.fusion.FeatureOperations.JoinFeatureOperation)
+    ein.participantBodies = [body]
+    ein.setOneSideExtent(
+        adsk.fusion.DistanceExtentDefinition.create(
+            adsk.core.ValueInput.createByReal(0.3)),
+        adsk.fusion.ExtentDirections.PositiveExtentDirection)
+    seed = root.features.extrudeFeatures.add(ein); seed.name = "PinSeed"
+
+    # ConstructionAxes.setByLine wants an existing line reference (sketch line
+    # or edge), not a raw InfiniteLine3D. Define the axis as the intersection
+    # of two offset construction planes instead — cleanest way to put a
+    # vertical axis at an arbitrary (X, Y) in the world.
+    yzo = root.constructionPlanes.createInput()
+    yzo.setByOffset(root.yZConstructionPlane, adsk.core.ValueInput.createByReal(5.0))
+    plane_x5 = root.constructionPlanes.add(yzo); plane_x5.name = "Plane_X5"
+    xzo = root.constructionPlanes.createInput()
+    xzo.setByOffset(root.xZConstructionPlane, adsk.core.ValueInput.createByReal(3.0))
+    plane_y3 = root.constructionPlanes.add(xzo); plane_y3.name = "Plane_Y3"
+
+    ai = root.constructionAxes.createInput()
+    ai.setByTwoPlanes(plane_x5, plane_y3)
+    axis = root.constructionAxes.add(ai)
+    axis.name = "Axis_CenterZ"
+
+    input_set = adsk.core.ObjectCollection.create()
+    input_set.add(seed)
+    cp_in = root.features.circularPatternFeatures.createInput(input_set, axis)
+    cp_in.quantity = adsk.core.ValueInput.createByReal(8)
+    cp_in.totalAngle = adsk.core.ValueInput.createByString("360 deg")
+    cp_in.isSymmetric = False
+    cp = root.features.circularPatternFeatures.add(cp_in)
+    cp.name = "Pattern_Pins_8x"
+    print(f"Circular pattern: 8 pins around Z axis at (50, 30)")
+    print(f"Body faces now: {body.faces.count}  vol: {body.volume:.3f} cm³")
+
+
+# =============================================================================
+# DESIGN-10 — Mirror feature across a construction plane
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    body = next((b for b in root.bRepBodies if b.name == "Bracket"), None)
+    if body is None:
+        print("Bracket not found. Run DESIGN-03 first.")
+        return
+
+    H = des.userParameters.itemByName("part_height").value
+
+    # Seed: a 3×3×2 mm boss on the +Y half of the part (y=4.5)
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(H))
+    plane = root.constructionPlanes.add(cpi); plane.name = "Plane_MirrorSeed"
+    sk = root.sketches.add(plane); sk.name = "Sketch_MirrorSeed"
+    sk.sketchCurves.sketchLines.addTwoPointRectangle(
+        adsk.core.Point3D.create(0.5, 4.7, 0),
+        adsk.core.Point3D.create(0.8, 5.0, 0))
+    ein = root.features.extrudeFeatures.createInput(
+        sk.profiles.item(0), adsk.fusion.FeatureOperations.JoinFeatureOperation)
+    ein.participantBodies = [body]
+    ein.setOneSideExtent(
+        adsk.fusion.DistanceExtentDefinition.create(
+            adsk.core.ValueInput.createByReal(0.2)),
+        adsk.fusion.ExtentDirections.PositiveExtentDirection)
+    seed = root.features.extrudeFeatures.add(ein); seed.name = "MirrorSeed"
+
+    # Mirror plane: construction plane at Y = part_width / 2 = 3.0 cm,
+    # parallel to XZ.
+    W = des.userParameters.itemByName("part_width").value
+    mp_in = root.constructionPlanes.createInput()
+    mp_in.setByOffset(root.xZConstructionPlane,
+                      adsk.core.ValueInput.createByReal(W / 2.0))
+    mirror_plane = root.constructionPlanes.add(mp_in)
+    mirror_plane.name = "Plane_MirrorMid"
+
+    input_set = adsk.core.ObjectCollection.create()
+    input_set.add(seed)
+    m_in = root.features.mirrorFeatures.createInput(input_set, mirror_plane)
+    mirror = root.features.mirrorFeatures.add(m_in)
+    mirror.name = "Mirror_Seed_acrossMid"
+    print(f"Mirrored MirrorSeed across XZ plane at Y={W*10/2:.0f} mm")
+    print(f"Body faces now: {body.faces.count}  vol: {body.volume:.3f} cm³")
+
+
+# =============================================================================
+# DESIGN-11 — Shell feature
+#             Creates a separate ShellTestBox body (off to the side of the
+#             Bracket) and shells it. Doesn't touch the Bracket itself.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    # Build a 40×30×20 mm closed box offset to the front of the Bracket
+    # (so y<0). Position: x=0..4, y=-5..-2, z=0..2.
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(0))
+    base_plane = root.constructionPlanes.add(cpi); base_plane.name = "Plane_ShellBase"
+    sk = root.sketches.add(base_plane); sk.name = "Sketch_ShellBox"
+    sk.sketchCurves.sketchLines.addTwoPointRectangle(
+        adsk.core.Point3D.create(0.0, -5.0, 0),
+        adsk.core.Point3D.create(4.0, -2.0, 0))
+    ein = root.features.extrudeFeatures.createInput(
+        sk.profiles.item(0),
+        adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    ein.setDistanceExtent(False, adsk.core.ValueInput.createByReal(2.0))
+    test_body = root.features.extrudeFeatures.add(ein).bodies.item(0)
+    test_body.name = "ShellTestBox"
+
+    # Shell removing the top face (the +Z one), wall = 2 mm
+    top = next(f for f in test_body.faces
+               if abs(f.centroid.z - 2.0) < 0.001)
+    faces_to_remove = adsk.core.ObjectCollection.create()
+    faces_to_remove.add(top)
+    sh_in = root.features.shellFeatures.createInput(faces_to_remove)
+    sh_in.insideThickness = adsk.core.ValueInput.createByReal(0.2)   # 2 mm inside
+    shell = root.features.shellFeatures.add(sh_in)
+    shell.name = "Shell_TestBox_2mm"
+    print(f"ShellTestBox: shelled (top removed, 2 mm wall inside)")
+    print(f"  faces={test_body.faces.count}  vol={test_body.volume:.3f} cm³")
+
+
+# =============================================================================
+# DESIGN-12 — Draft feature
+#             Builds a separate DraftTestBox body and applies draft to its
+#             side faces.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    # 30×30×30 mm cube offset further back (y<0, beyond the shell test).
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(0))
+    plane = root.constructionPlanes.add(cpi); plane.name = "Plane_DraftBase"
+    sk = root.sketches.add(plane); sk.name = "Sketch_DraftCube"
+    sk.sketchCurves.sketchLines.addTwoPointRectangle(
+        adsk.core.Point3D.create(0.0, -10.0, 0),
+        adsk.core.Point3D.create(3.0, -7.0, 0))
+    ein = root.features.extrudeFeatures.createInput(
+        sk.profiles.item(0),
+        adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    ein.setDistanceExtent(False, adsk.core.ValueInput.createByReal(3.0))
+    test_body = root.features.extrudeFeatures.add(ein).bodies.item(0)
+    test_body.name = "DraftTestBox"
+
+    # Draft the four side faces 5° relative to the bottom face
+    bottom = next(f for f in test_body.faces
+                  if abs(f.centroid.z - 0.0) < 0.001)
+    # DraftFeatures.createInput wants a plain list[BRepFace], not an
+    # ObjectCollection. The 3rd arg (isTangentChain) is required positional.
+    side_faces = []
+    for f in test_body.faces:
+        ok, nrm = f.evaluator.getNormalAtPoint(f.centroid)
+        if ok and abs(nrm.z) < 0.001:
+            side_faces.append(f)
+
+    df_in = root.features.draftFeatures.createInput(side_faces, bottom, False)
+    df_in.setSingleAngle(False, adsk.core.ValueInput.createByString("5 deg"))
+    draft = root.features.draftFeatures.add(df_in)
+    draft.name = "Draft_TestCube_5deg"
+    print(f"DraftTestBox: {len(side_faces)} side faces drafted 5° from bottom")
+    print(f"  faces={test_body.faces.count}  vol={test_body.volume:.3f} cm³")
