@@ -1,12 +1,13 @@
 {
-  "autodeskProduct": "Fusion 360",
+  "autodeskProduct": "Fusion",
   "type": "script",
   "engine": "Python",
   "license": "None",
   "runOnStartup": false,
-  "supportedOS": "windows|osx",
+  "supportedOS": "windows|mac",
   "author": "Fusion MCP Test Library",
   "version": "1.0",
+  "editEnabled": true,
   "description": "[Design] DESIGN-05: Edit a parameter and verify model updates (parametric test)",
   "id": "be7e40ba-e586-5ab0-b621-88412aaa236a"
 }

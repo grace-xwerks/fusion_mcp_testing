@@ -228,14 +228,15 @@ Do NOT use try/except — unhandled exceptions are the MCP error signal.
 '''
 
 MANIFEST_TEMPLATE = {
-    "autodeskProduct": "Fusion 360",
+    "autodeskProduct": "Fusion",
     "type":            "script",
     "engine":          "Python",
     "license":         "None",
     "runOnStartup":    False,
-    "supportedOS":     "windows|osx",
+    "supportedOS":     "windows|mac",
     "author":          AUTHOR,
     "version":         VERSION,
+    "editEnabled":     True,
 }
 
 

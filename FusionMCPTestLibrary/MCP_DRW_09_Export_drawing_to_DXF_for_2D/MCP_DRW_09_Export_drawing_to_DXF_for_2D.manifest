@@ -1,12 +1,13 @@
 {
-  "autodeskProduct": "Fusion 360",
+  "autodeskProduct": "Fusion",
   "type": "script",
   "engine": "Python",
   "license": "None",
   "runOnStartup": false,
-  "supportedOS": "windows|osx",
+  "supportedOS": "windows|mac",
   "author": "Fusion MCP Test Library",
   "version": "1.0",
+  "editEnabled": true,
   "description": "[Drawings] DRW-09: Export drawing to DXF (for 2D manufacturing / laser / waterjet)",
   "id": "218faa42-2dd4-5abf-9ffc-820242df5736"
 }

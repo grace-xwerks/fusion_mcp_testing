@@ -1,12 +1,13 @@
 {
-  "autodeskProduct": "Fusion 360",
+  "autodeskProduct": "Fusion",
   "type": "script",
   "engine": "Python",
   "license": "None",
   "runOnStartup": false,
-  "supportedOS": "windows|osx",
+  "supportedOS": "windows|mac",
   "author": "Fusion MCP Test Library",
   "version": "1.0",
+  "editEnabled": true,
   "description": "[Core] D-05: Intentional exception (error signal test \u2014 NO try/except by design)",
   "id": "99c61a6f-5357-5fcf-bc40-a5fbc894aba0"
 }

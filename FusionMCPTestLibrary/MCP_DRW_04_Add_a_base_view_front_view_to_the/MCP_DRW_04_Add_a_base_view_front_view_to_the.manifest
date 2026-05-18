@@ -1,12 +1,13 @@
 {
-  "autodeskProduct": "Fusion 360",
+  "autodeskProduct": "Fusion",
   "type": "script",
   "engine": "Python",
   "license": "None",
   "runOnStartup": false,
-  "supportedOS": "windows|osx",
+  "supportedOS": "windows|mac",
   "author": "Fusion MCP Test Library",
   "version": "1.0",
+  "editEnabled": true,
   "description": "[Drawings] DRW-04: Add a base view (front view) to the active drawing sheet",
   "id": "084ee398-8c1b-59ae-b594-8b863740dd5f"
 }

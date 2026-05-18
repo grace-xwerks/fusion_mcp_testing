@@ -1,12 +1,13 @@
 {
-  "autodeskProduct": "Fusion 360",
+  "autodeskProduct": "Fusion",
   "type": "script",
   "engine": "Python",
   "license": "None",
   "runOnStartup": false,
-  "supportedOS": "windows|osx",
+  "supportedOS": "windows|mac",
   "author": "Fusion MCP Test Library",
   "version": "1.0",
+  "editEnabled": true,
   "description": "[Drawings] DRW-16: Inspect existing parts lists / detect BOM presence",
   "id": "968e36a4-1ea8-59c3-81d1-e371278a1616"
 }
