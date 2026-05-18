@@ -36,7 +36,8 @@ def run(_context: str):
     dy = (bb.maxPoint.y - bb.minPoint.y) * 10
     dz = (bb.maxPoint.z - bb.minPoint.z) * 10
     print(f"\n  Bounding box: {dx:.1f} x {dy:.1f} x {dz:.1f} mm")
-    print(f"  Volume      : {body.volume * 1000:.1f} cm³")  # cm³ from cm³
+    # body.volume is in Fusion internal units (cm^3). Convert to mm^3 for display.
+    print(f"  Volume      : {body.volume * 1000:.1f} mm³  ({body.volume:.2f} cm³)")
 
     print(f"\n  Feature timeline ({root.features.count} features):")
     for i in range(root.features.count):
