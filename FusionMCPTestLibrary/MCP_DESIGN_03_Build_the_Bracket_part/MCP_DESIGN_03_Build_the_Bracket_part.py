@@ -90,12 +90,25 @@ def run(_context: str):
             CR
         )
 
+    # Sketching a rectangle on a face creates 2 profiles (inner + outer face
+    # region). Pick the smaller one — the actual pocket.
+    inner_pocket = None
+    for i in range(sk_pocket.profiles.count):
+        pr = sk_pocket.profiles.item(i)
+        bb = pr.boundingBox
+        if (bb.maxPoint.x - bb.minPoint.x) < L * 0.95:
+            inner_pocket = pr
+            break
     pocket_ext_in = root.features.extrudeFeatures.createInput(
-        sk_pocket.profiles.item(0),
+        inner_pocket,
         adsk.fusion.FeatureOperations.CutFeatureOperation
     )
-    pocket_ext_in.setDistanceExtent(
-        False, adsk.core.ValueInput.createByReal(-PD)
+    pocket_ext_in.participantBodies = [body]
+    pocket_ext_in.setOneSideExtent(
+        adsk.fusion.DistanceExtentDefinition.create(
+            adsk.core.ValueInput.createByReal(PD)
+        ),
+        adsk.fusion.ExtentDirections.NegativeExtentDirection
     )
     root.features.extrudeFeatures.add(pocket_ext_in)
     print(f"Pocket cut: {pk_l*10:.0f} x {pk_w*10:.0f} mm, depth {PD*10:.0f} mm, r={CR*10:.0f} mm corners")
@@ -117,15 +130,19 @@ def run(_context: str):
             HD / 2
         )
 
+    # Sketching circles on a face produces N+1 profiles (the N circles plus
+    # the outer face-region). Keep only the circle profiles (small bbox).
+    circle_profiles = adsk.core.ObjectCollection.create()
+    for i in range(sk_holes.profiles.count):
+        pr = sk_holes.profiles.item(i)
+        bb = pr.boundingBox
+        if (bb.maxPoint.x - bb.minPoint.x) < HD * 1.5:
+            circle_profiles.add(pr)
     holes_ext_in = root.features.extrudeFeatures.createInput(
-        sk_holes.profiles.item(0),   # first circle profile
+        circle_profiles,
         adsk.fusion.FeatureOperations.CutFeatureOperation
     )
-    holes_ext_in.setDistanceExtent(
-        True,   # symmetric = False, through all
-        adsk.core.ValueInput.createByString("-100 mm")
-    )
-    # Use extentOne for through-all
+    holes_ext_in.participantBodies = [body]
     holes_ext_in.setOneSideExtent(
         adsk.fusion.ThroughAllExtentDefinition.create(),
         adsk.fusion.ExtentDirections.NegativeExtentDirection
