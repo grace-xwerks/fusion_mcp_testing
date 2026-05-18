@@ -26,7 +26,7 @@ import adsk.core
 def run(_context: str):
     app = adsk.core.Application.get()
     print(f"Fusion version: {app.version}")
-    print(f"Active user:    {app.currentUser.name}")
+    print(f"Active user:    {app.currentUser.displayName}")
     print(f"Active product: {app.activeProduct.productType if app.activeProduct else 'None'}")
 
 
