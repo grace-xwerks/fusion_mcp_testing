@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Manufacture] CAM-10: Generate toolpaths for all operations in setup 0",
+  "id": "2375e796-930e-5aff-9bf5-5645e2bde5ed"
+}

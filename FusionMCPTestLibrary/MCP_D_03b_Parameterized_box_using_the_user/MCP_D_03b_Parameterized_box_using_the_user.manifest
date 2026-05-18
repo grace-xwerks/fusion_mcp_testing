@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Core] D-03b: Parameterized box using the user parameter",
+  "id": "f1e2e48c-3a6c-5f66-9e3b-bf40ec24b03a"
+}

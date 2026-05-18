@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Design] DESIGN-04: Inspect the completed part \u2014 body/face/edge/hole inventory",
+  "id": "1def76f6-8b7c-5625-9738-14b64e203b4a"
+}

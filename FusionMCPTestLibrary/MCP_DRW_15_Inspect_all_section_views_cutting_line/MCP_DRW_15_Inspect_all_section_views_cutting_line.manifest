@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Drawings] DRW-15: Inspect all section views \u2014 cutting line geometry + labels",
+  "id": "9b5b2c6f-e87a-56ca-b8b1-b6a5da2e1ee5"
+}

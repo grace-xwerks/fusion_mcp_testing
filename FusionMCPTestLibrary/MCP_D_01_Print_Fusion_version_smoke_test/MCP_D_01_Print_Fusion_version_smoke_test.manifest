@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Core] D-01: Print Fusion version (smoke test / connectivity check)",
+  "id": "9b8e2b70-763e-5e15-abca-336fcac31003"
+}

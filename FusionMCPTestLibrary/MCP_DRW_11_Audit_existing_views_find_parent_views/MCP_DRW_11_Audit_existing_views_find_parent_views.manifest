@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Drawings] DRW-11: Audit existing views \u2014 find parent views suitable for section cuts",
+  "id": "317a92ba-14b9-509a-8e31-fe68919efa72"
+}

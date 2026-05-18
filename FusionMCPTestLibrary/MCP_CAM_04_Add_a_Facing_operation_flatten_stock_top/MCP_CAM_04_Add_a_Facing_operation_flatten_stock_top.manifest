@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Manufacture] CAM-04: Add a Facing operation (flatten stock top)",
+  "id": "528c99d7-db44-5b61-a187-638b8356271a"
+}

@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Drawings] DRW-10: Full drawing audit \u2014 counts views, dims, notes across all sheets",
+  "id": "8b1b62c7-a036-5f3d-9740-b817bf328e76"
+}

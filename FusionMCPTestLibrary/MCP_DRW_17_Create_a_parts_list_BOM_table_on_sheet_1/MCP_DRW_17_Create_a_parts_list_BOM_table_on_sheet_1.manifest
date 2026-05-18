@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Drawings] DRW-17: Create a parts list (BOM table) on sheet 1",
+  "id": "1cc8996b-a2bf-5d59-9a02-91edb557c616"
+}

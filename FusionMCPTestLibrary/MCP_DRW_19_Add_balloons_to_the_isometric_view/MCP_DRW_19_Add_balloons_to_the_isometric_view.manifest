@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Drawings] DRW-19: Add balloons to the isometric view \u2014 linked to the parts list",
+  "id": "905f0247-4232-5dd8-ae3f-ed8d3ddc57a1"
+}

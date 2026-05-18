@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Manufacture] CAM-01: Verify Manufacture workspace is active + inspect existing setups",
+  "id": "621267e2-5dbe-5711-ab95-cf22a20e93fe"
+}

@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Core] BONUS: sphere: exercises revolve instead of extrude",
+  "id": "08725ab1-114e-5a8e-961e-0aef5ada7089"
+}

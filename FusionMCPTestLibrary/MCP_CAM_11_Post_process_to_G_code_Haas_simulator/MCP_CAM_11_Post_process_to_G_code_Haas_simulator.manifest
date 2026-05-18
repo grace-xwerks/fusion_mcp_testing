@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Manufacture] CAM-11: Post-process to G-code (Haas simulator \u2014 per CNC Fundamentals course)",
+  "id": "86afe18c-de02-59ff-9448-819e6ec38f22"
+}

@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Manufacture] CAM-12: Full setup inventory dump \u2014 useful after a session to audit state",
+  "id": "9e8c465f-bce7-5fb1-8325-8e2ae0533523"
+}

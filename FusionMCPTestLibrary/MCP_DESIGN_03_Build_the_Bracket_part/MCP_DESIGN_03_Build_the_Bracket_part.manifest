@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Design] DESIGN-03: Build the Bracket part",
+  "id": "91d02ec3-68fa-5275-9ed8-4d8e88e5a3ce"
+}

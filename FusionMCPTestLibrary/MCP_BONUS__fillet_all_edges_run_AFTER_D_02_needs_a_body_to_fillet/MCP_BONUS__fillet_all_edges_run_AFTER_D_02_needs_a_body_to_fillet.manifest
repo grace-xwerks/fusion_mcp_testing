@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion 360",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|osx",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "description": "[Core] BONUS: fillet_all_edges: run AFTER D-02 (needs a body to fillet)",
+  "id": "1363eb95-0687-51e1-adf4-4fde53344fc9"
+}
