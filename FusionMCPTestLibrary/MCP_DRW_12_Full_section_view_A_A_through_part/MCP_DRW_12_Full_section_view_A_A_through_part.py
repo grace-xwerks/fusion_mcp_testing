@@ -4,7 +4,7 @@ MCP_DRW_12_Full_section_view_A_A_through_part
 Group       : Drawings
 Script ID   : DRW-12
 Description : Full section view — A-A through part centerline (vertical cut)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_12_Full_section_view_A_A_through_part

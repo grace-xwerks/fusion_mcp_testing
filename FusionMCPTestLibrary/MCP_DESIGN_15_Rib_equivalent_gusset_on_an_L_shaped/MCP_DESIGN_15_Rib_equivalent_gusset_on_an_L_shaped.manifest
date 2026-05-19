@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Design] DESIGN-15: Rib-equivalent gusset on an L-shaped body (via symmetric extrude)",
+  "id": "fcdf1b61-3d6e-5403-b3b5-eba572e27769"
+}

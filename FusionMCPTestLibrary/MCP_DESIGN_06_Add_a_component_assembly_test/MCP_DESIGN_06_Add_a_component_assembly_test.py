@@ -4,7 +4,7 @@ MCP_DESIGN_06_Add_a_component_assembly_test
 Group       : Design
 Script ID   : DESIGN-06
 Description : Add a component / assembly test
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DESIGN_06_Add_a_component_assembly_test

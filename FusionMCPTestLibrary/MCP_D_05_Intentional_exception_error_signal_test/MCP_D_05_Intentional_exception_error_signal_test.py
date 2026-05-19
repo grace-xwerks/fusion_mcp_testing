@@ -4,7 +4,7 @@ MCP_D_05_Intentional_exception_error_signal_test
 Group       : Core
 Script ID   : D-05
 Description : Intentional exception (error signal test — NO try/except by design)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_D_05_Intentional_exception_error_signal_test

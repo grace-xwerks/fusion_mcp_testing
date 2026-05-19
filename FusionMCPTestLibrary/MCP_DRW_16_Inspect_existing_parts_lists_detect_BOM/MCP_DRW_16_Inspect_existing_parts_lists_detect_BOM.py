@@ -4,7 +4,7 @@ MCP_DRW_16_Inspect_existing_parts_lists_detect_BOM
 Group       : Drawings
 Script ID   : DRW-16
 Description : Inspect existing parts lists / detect BOM presence
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_16_Inspect_existing_parts_lists_detect_BOM

@@ -4,7 +4,7 @@ MCP_CAM_12_Full_setup_inventory_dump_useful_after
 Group       : Manufacture
 Script ID   : CAM-12
 Description : Full setup inventory dump — useful after a session to audit state
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_CAM_12_Full_setup_inventory_dump_useful_after

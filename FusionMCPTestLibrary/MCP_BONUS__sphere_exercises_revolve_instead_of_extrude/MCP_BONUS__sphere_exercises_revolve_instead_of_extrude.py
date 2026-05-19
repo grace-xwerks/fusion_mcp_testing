@@ -4,7 +4,7 @@ MCP_BONUS__sphere_exercises_revolve_instead_of_extrude
 Group       : Core
 Script ID   : BONUS: sphere
 Description : exercises revolve instead of extrude
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_BONUS__sphere_exercises_revolve_instead_of_extrude

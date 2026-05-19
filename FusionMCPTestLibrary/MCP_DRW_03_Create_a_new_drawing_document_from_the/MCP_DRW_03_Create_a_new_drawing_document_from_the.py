@@ -4,7 +4,7 @@ MCP_DRW_03_Create_a_new_drawing_document_from_the
 Group       : Drawings
 Script ID   : DRW-03
 Description : Create a new drawing document from the active Design
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_03_Create_a_new_drawing_document_from_the

@@ -4,7 +4,7 @@ MCP_CAM_11_Post_process_to_G_code_Haas_simulator
 Group       : Manufacture
 Script ID   : CAM-11
 Description : Post-process to G-code (Haas simulator — per CNC Fundamentals course)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_CAM_11_Post_process_to_G_code_Haas_simulator

@@ -4,7 +4,7 @@ MCP_DESIGN_11_Shell_feature
 Group       : Design
 Script ID   : DESIGN-11
 Description : Shell feature
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DESIGN_11_Shell_feature

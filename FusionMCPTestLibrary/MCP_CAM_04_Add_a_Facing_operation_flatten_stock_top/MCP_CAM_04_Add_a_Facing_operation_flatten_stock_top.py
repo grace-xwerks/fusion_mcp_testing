@@ -4,7 +4,7 @@ MCP_CAM_04_Add_a_Facing_operation_flatten_stock_top
 Group       : Manufacture
 Script ID   : CAM-04
 Description : Add a Facing operation (flatten stock top)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_CAM_04_Add_a_Facing_operation_flatten_stock_top

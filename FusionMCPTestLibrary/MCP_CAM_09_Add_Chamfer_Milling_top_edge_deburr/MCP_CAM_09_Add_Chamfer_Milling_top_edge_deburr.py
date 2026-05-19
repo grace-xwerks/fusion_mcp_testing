@@ -4,7 +4,7 @@ MCP_CAM_09_Add_Chamfer_Milling_top_edge_deburr
 Group       : Manufacture
 Script ID   : CAM-09
 Description : Add Chamfer Milling (top edge deburr / chamfer)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_CAM_09_Add_Chamfer_Milling_top_edge_deburr

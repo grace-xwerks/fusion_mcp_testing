@@ -4,7 +4,7 @@ MCP_D_04_print_multiple_lines_output_fidelity
 Group       : Core
 Script ID   : D-04
 Description : print() multiple lines (output fidelity check)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_D_04_print_multiple_lines_output_fidelity

@@ -4,7 +4,7 @@ MCP_DRW_10_Full_drawing_audit_counts_views_dims
 Group       : Drawings
 Script ID   : DRW-10
 Description : Full drawing audit — counts views, dims, notes across all sheets
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_10_Full_drawing_audit_counts_views_dims

@@ -4,7 +4,7 @@ MCP_DRW_15_Inspect_all_section_views_cutting_line
 Group       : Drawings
 Script ID   : DRW-15
 Description : Inspect all section views — cutting line geometry + labels
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_15_Inspect_all_section_views_cutting_line

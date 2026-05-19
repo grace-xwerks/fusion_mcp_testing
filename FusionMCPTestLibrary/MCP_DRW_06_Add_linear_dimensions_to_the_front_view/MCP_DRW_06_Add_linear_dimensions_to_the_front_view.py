@@ -4,7 +4,7 @@ MCP_DRW_06_Add_linear_dimensions_to_the_front_view
 Group       : Drawings
 Script ID   : DRW-06
 Description : Add linear dimensions to the front view
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_06_Add_linear_dimensions_to_the_front_view

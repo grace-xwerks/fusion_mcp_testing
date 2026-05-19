@@ -4,7 +4,7 @@ MCP_CAM_01_Verify_Manufacture_workspace_is_active
 Group       : Manufacture
 Script ID   : CAM-01
 Description : Verify Manufacture workspace is active + inspect existing setups
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_CAM_01_Verify_Manufacture_workspace_is_active

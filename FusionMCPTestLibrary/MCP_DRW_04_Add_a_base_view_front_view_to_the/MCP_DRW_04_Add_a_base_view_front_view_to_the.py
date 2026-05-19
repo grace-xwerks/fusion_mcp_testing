@@ -4,7 +4,7 @@ MCP_DRW_04_Add_a_base_view_front_view_to_the
 Group       : Drawings
 Script ID   : DRW-04
 Description : Add a base view (front view) to the active drawing sheet
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_04_Add_a_base_view_front_view_to_the

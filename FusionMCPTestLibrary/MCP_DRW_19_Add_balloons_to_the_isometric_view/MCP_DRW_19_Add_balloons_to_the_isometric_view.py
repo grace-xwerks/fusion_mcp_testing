@@ -4,7 +4,7 @@ MCP_DRW_19_Add_balloons_to_the_isometric_view
 Group       : Drawings
 Script ID   : DRW-19
 Description : Add balloons to the isometric view — linked to the parts list
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_19_Add_balloons_to_the_isometric_view

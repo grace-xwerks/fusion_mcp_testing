@@ -4,7 +4,7 @@ MCP_DESIGN_08_Rectangular_pattern_of_a_feature
 Group       : Design
 Script ID   : DESIGN-08
 Description : Rectangular pattern of a feature
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DESIGN_08_Rectangular_pattern_of_a_feature

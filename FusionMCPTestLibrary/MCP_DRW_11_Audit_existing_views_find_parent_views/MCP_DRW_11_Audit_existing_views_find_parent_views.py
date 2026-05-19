@@ -4,7 +4,7 @@ MCP_DRW_11_Audit_existing_views_find_parent_views
 Group       : Drawings
 Script ID   : DRW-11
 Description : Audit existing views — find parent views suitable for section cuts
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_11_Audit_existing_views_find_parent_views

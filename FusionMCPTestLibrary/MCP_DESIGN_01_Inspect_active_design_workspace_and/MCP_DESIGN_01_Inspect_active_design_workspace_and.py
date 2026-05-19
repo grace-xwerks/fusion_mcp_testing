@@ -4,7 +4,7 @@ MCP_DESIGN_01_Inspect_active_design_workspace_and
 Group       : Design
 Script ID   : DESIGN-01
 Description : Inspect active design — workspace and product type check
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DESIGN_01_Inspect_active_design_workspace_and

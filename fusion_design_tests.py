@@ -676,3 +676,200 @@ def run(_context: str):
     draft.name = "Draft_TestCube_5deg"
     print(f"DraftTestBox: {len(side_faces)} side faces drafted 5° from bottom")
     print(f"  faces={test_body.faces.count}  vol={test_body.volume:.3f} cm³")
+
+
+# =============================================================================
+# DESIGN-13 — Revolve a sketch profile around an axis
+#             Builds a stepped axisymmetric ring offset from the Bracket.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    # Sketch a rectangular profile and an axis line on the world XZ plane.
+    # Profile sits at X = 15..18 cm, Z = 1..3 cm (above the floor, offset in
+    # +X away from Bracket/MountingPlate). Axis runs along world X at Z=0.
+    sk = root.sketches.add(root.xZConstructionPlane)
+    sk.name = "Sketch_RevolveProfile"
+    lines = sk.sketchCurves.sketchLines
+
+    # Profile rectangle (closed loop)
+    p1 = adsk.core.Point3D.create(15.0, 1.0, 0)
+    p2 = adsk.core.Point3D.create(18.0, 1.0, 0)
+    p3 = adsk.core.Point3D.create(18.0, 3.0, 0)
+    p4 = adsk.core.Point3D.create(15.0, 3.0, 0)
+    lines.addByTwoPoints(p1, p2)
+    lines.addByTwoPoints(p2, p3)
+    lines.addByTwoPoints(p3, p4)
+    lines.addByTwoPoints(p4, p1)
+
+    # Axis line on local X (world X at Z=0)
+    axis_line = lines.addByTwoPoints(
+        adsk.core.Point3D.create(14.0, 0, 0),
+        adsk.core.Point3D.create(19.0, 0, 0),
+    )
+
+    # Pick the rectangle profile (the one whose bbox does NOT touch the axis)
+    prof = None
+    for i in range(sk.profiles.count):
+        pr = sk.profiles.item(i)
+        bb = pr.boundingBox
+        # Profile rectangle: y in 1..3 cm; axis line has y=0 endpoints
+        if bb.minPoint.y >= 0.99:
+            prof = pr
+            break
+
+    rev_in = root.features.revolveFeatures.createInput(
+        prof, axis_line,
+        adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    rev_in.setAngleExtent(False, adsk.core.ValueInput.createByString("360 deg"))
+    rev = root.features.revolveFeatures.add(rev_in)
+    ring = rev.bodies.item(0)
+    ring.name = "RevolveRing"
+    # Expected volume: π × (Ro² − Ri²) × width
+    #                = π × (3² − 1²) × 3 = π × 8 × 3 = 75.40 cm³
+    print(f"RevolveRing: faces={ring.faces.count} vol={ring.volume:.3f} cm³ "
+          f"(expected ~75.40)")
+
+
+# =============================================================================
+# DESIGN-14 — Sweep a profile along a path
+#             Cylindrical rod following a 90° arc.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    # PATH sketch: 90° arc on the XY plane (Z=0), in free space at +X, -Y
+    sk_path = root.sketches.add(root.xYConstructionPlane)
+    sk_path.name = "Sketch_SweepPath"
+    arcs = sk_path.sketchCurves.sketchArcs
+    # Arc from (20, -10) to (25, -5), center (20, -5), radius 5
+    arc = arcs.addByCenterStartSweep(
+        adsk.core.Point3D.create(20.0, -5.0, 0),    # center
+        adsk.core.Point3D.create(20.0, -10.0, 0),   # start  (3 o'clock from center = wrong: start is at -90°)
+        # sweep 90° to (25, -5)
+        1.5708)   # 90° in radians
+    # path collection
+    path_curves = adsk.core.ObjectCollection.create()
+    path_curves.add(arc)
+    path = root.features.createPath(arc)
+
+    # PROFILE sketch: circle in a plane perpendicular to the arc start.
+    # Arc start at (20, -10, 0); tangent there points along +X (since arc
+    # sweeps from start toward (25, -5) going counterclockwise). The plane
+    # perpendicular to +X at (20, -10, 0) is YZ-parallel — use yZ plane
+    # offset to X=20.
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(root.yZConstructionPlane, adsk.core.ValueInput.createByReal(20.0))
+    perp_plane = root.constructionPlanes.add(cpi)
+    perp_plane.name = "Plane_SweepProfile"
+    sk_prof = root.sketches.add(perp_plane)
+    sk_prof.name = "Sketch_SweepProfile"
+    # Sketch on YZ-offset plane: local (X_local, Y_local) = world (Y, Z)
+    # Profile center should be at world (20, -10, 0) → local (-10, 0)
+    sk_prof.sketchCurves.sketchCircles.addByCenterRadius(
+        adsk.core.Point3D.create(-10.0, 0, 0), 0.4)   # 8 mm Ø rod
+    profile = sk_prof.profiles.item(0)
+
+    sw_in = root.features.sweepFeatures.createInput(
+        profile, path, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    sw = root.features.sweepFeatures.add(sw_in)
+    rod = sw.bodies.item(0)
+    rod.name = "SweepRod"
+    # Expected vol: π × 0.4² × (arc length = 5 × π/2) = π × 0.16 × 7.854
+    #             = 3.95 cm³
+    print(f"SweepRod: faces={rod.faces.count} vol={rod.volume:.3f} cm³ "
+          f"(expected ~3.95)")
+
+
+# =============================================================================
+# DESIGN-15 — Rib-equivalent gusset on an L-shaped body (via symmetric extrude)
+#
+# Quirk discovered: in Fusion 2703.x Insider, RibFeatures is read-only via
+# the Python API — RibFeatures has no createInput / add methods (only cast,
+# count, item, itemByName). To produce a rib programmatically we sketch the
+# gusset cross-section as a closed triangle and extrude it symmetrically
+# with a thin wall thickness. Same resulting geometry; just a different
+# feature in the timeline.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    # ── 1. Build an L-shape body at X = -5..-1, Y = 8..11 ───────────────────
+    sk_L = root.sketches.add(root.xYConstructionPlane)
+    sk_L.name = "Sketch_LShape"
+    lines = sk_L.sketchCurves.sketchLines
+    pts = [
+        adsk.core.Point3D.create(-5.0,  8.0, 0),
+        adsk.core.Point3D.create(-1.0,  8.0, 0),
+        adsk.core.Point3D.create(-1.0,  8.5, 0),
+        adsk.core.Point3D.create(-4.5,  8.5, 0),
+        adsk.core.Point3D.create(-4.5, 11.0, 0),
+        adsk.core.Point3D.create(-5.0, 11.0, 0),
+    ]
+    for i in range(len(pts)):
+        lines.addByTwoPoints(pts[i], pts[(i+1) % len(pts)])
+
+    ein = root.features.extrudeFeatures.createInput(
+        sk_L.profiles.item(0),
+        adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    ein.setDistanceExtent(False, adsk.core.ValueInput.createByReal(2.0))   # 20 mm tall
+    Lbody = root.features.extrudeFeatures.add(ein).bodies.item(0)
+    Lbody.name = "RibTestL"
+    print(f"L body: faces={Lbody.faces.count} vol={Lbody.volume:.3f} cm³")
+
+    # ── 2. Gusset triangle in XY plane, in the inside-corner void ───────────
+    # Corner edge runs along Z at (X=-4.5, Y=8.5). Triangle vertices:
+    #   A (-4.5, 8.5)  — on the corner edge
+    #   B (-3.5, 8.5)  — along floor's top face (Y=8.5, X∈[-5,-1])
+    #   C (-4.5, 9.5)  — along back wall's inside face (X=-4.5, Y∈[8,11])
+    sk_rib = root.sketches.add(root.xYConstructionPlane)
+    sk_rib.name = "Sketch_RibGusset"
+    rl = sk_rib.sketchCurves.sketchLines
+    a = adsk.core.Point3D.create(-4.5, 8.5, 0)
+    b = adsk.core.Point3D.create(-3.5, 8.5, 0)
+    c = adsk.core.Point3D.create(-4.5, 9.5, 0)
+    rl.addByTwoPoints(a, b)
+    rl.addByTwoPoints(b, c)
+    rl.addByTwoPoints(c, a)
+
+    # The L-shape sketch on xYConstructionPlane produced its own face-region
+    # profiles. Pick the small triangle profile by bbox size.
+    triangle_prof = None
+    for i in range(sk_rib.profiles.count):
+        pr = sk_rib.profiles.item(i)
+        bb = pr.boundingBox
+        dx = bb.maxPoint.x - bb.minPoint.x
+        dy = bb.maxPoint.y - bb.minPoint.y
+        if dx < 1.5 and dy < 1.5:
+            triangle_prof = pr
+            break
+
+    # ── 3. Extrude +Z by full body height = 2 cm, Join with L-body ──────────
+    rib_in = root.features.extrudeFeatures.createInput(
+        triangle_prof,
+        adsk.fusion.FeatureOperations.JoinFeatureOperation)
+    rib_in.participantBodies = [Lbody]
+    rib_in.setOneSideExtent(
+        adsk.fusion.DistanceExtentDefinition.create(
+            adsk.core.ValueInput.createByReal(2.0)),
+        adsk.fusion.ExtentDirections.PositiveExtentDirection)
+    rib_feat = root.features.extrudeFeatures.add(rib_in)
+    rib_feat.name = "Rib_Gusset"
+    # Expected Δvol: triangle area 0.5 × extrusion height 2 = 1.0 cm³
+    print(f"After rib gusset (Δ expected +1.00): faces={Lbody.faces.count} "
+          f"vol={Lbody.volume:.3f} cm³")

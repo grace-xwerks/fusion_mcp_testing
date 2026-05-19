@@ -4,7 +4,7 @@ MCP_DRW_08_Export_drawing_sheet_to_PDF
 Group       : Drawings
 Script ID   : DRW-08
 Description : Export drawing sheet to PDF
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_08_Export_drawing_sheet_to_PDF

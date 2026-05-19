@@ -4,7 +4,7 @@ MCP_DRW_14_Half_section_view_C_C_symmetric_parts
 Group       : Drawings
 Script ID   : DRW-14
 Description : Half section view — C-C (symmetric parts only)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_14_Half_section_view_C_C_symmetric_parts

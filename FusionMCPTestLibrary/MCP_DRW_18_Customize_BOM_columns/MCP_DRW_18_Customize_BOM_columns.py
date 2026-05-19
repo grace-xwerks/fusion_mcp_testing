@@ -4,7 +4,7 @@ MCP_DRW_18_Customize_BOM_columns
 Group       : Drawings
 Script ID   : DRW-18
 Description : Customize BOM columns
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_18_Customize_BOM_columns

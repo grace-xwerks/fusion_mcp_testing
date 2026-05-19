@@ -4,7 +4,7 @@ MCP_DRW_01_Check_if_a_drawing_document_is
 Group       : Drawings
 Script ID   : DRW-01
 Description : Check if a drawing document is currently active
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_01_Check_if_a_drawing_document_is

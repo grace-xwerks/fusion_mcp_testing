@@ -4,7 +4,7 @@ MCP_DRW_13_Offset_section_view_B_B_stepped_cut
 Group       : Drawings
 Script ID   : DRW-13
 Description : Offset section view — B-B stepped cut
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_13_Offset_section_view_B_B_stepped_cut

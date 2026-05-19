@@ -4,7 +4,7 @@ MCP_CAM_05_Add_a_2D_Adaptive_Clearing_operation
 Group       : Manufacture
 Script ID   : CAM-05
 Description : Add a 2D Adaptive Clearing operation (HEM-style roughing)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_CAM_05_Add_a_2D_Adaptive_Clearing_operation

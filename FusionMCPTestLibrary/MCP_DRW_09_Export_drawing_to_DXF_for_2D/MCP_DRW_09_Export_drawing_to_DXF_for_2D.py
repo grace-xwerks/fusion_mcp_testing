@@ -4,7 +4,7 @@ MCP_DRW_09_Export_drawing_to_DXF_for_2D
 Group       : Drawings
 Script ID   : DRW-09
 Description : Export drawing to DXF (for 2D manufacturing / laser / waterjet)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_09_Export_drawing_to_DXF_for_2D

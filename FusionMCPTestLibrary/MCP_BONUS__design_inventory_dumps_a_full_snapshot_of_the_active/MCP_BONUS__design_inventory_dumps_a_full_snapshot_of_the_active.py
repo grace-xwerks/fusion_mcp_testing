@@ -4,7 +4,7 @@ MCP_BONUS__design_inventory_dumps_a_full_snapshot_of_the_active
 Group       : Core
 Script ID   : BONUS: design_inventory
 Description : dumps a full snapshot of the active design
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_BONUS__design_inventory_dumps_a_full_snapshot_of_the_active

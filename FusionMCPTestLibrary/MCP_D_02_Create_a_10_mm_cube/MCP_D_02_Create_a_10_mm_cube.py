@@ -4,7 +4,7 @@ MCP_D_02_Create_a_10_mm_cube
 Group       : Core
 Script ID   : D-02
 Description : Create a 10 mm cube
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_D_02_Create_a_10_mm_cube

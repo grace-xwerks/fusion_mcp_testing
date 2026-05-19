@@ -4,7 +4,7 @@ MCP_CAM_02_Inspect_the_tool_library
 Group       : Manufacture
 Script ID   : CAM-02
 Description : Inspect the tool library
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_CAM_02_Inspect_the_tool_library

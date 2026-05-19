@@ -4,7 +4,7 @@ MCP_D_01_Print_Fusion_version_smoke_test
 Group       : Core
 Script ID   : D-01
 Description : Print Fusion version (smoke test / connectivity check)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_D_01_Print_Fusion_version_smoke_test

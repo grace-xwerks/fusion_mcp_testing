@@ -4,7 +4,7 @@ MCP_CAM_08_Add_Drilling_operations_spot_drill_drill
 Group       : Manufacture
 Script ID   : CAM-08
 Description : Add Drilling operations (spot drill + drill)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_CAM_08_Add_Drilling_operations_spot_drill_drill

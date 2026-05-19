@@ -4,7 +4,7 @@ MCP_CAM_06_Add_a_2D_Pocket_operation_pocket_finish
 Group       : Manufacture
 Script ID   : CAM-06
 Description : Add a 2D Pocket operation (pocket finish pass)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_CAM_06_Add_a_2D_Pocket_operation_pocket_finish

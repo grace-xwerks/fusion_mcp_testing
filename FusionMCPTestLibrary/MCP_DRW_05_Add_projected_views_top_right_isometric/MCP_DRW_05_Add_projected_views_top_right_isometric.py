@@ -4,7 +4,7 @@ MCP_DRW_05_Add_projected_views_top_right_isometric
 Group       : Drawings
 Script ID   : DRW-05
 Description : Add projected views (top, right, isometric)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_05_Add_projected_views_top_right_isometric

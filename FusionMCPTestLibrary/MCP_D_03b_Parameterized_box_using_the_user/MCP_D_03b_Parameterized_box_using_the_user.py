@@ -4,7 +4,7 @@ MCP_D_03b_Parameterized_box_using_the_user
 Group       : Core
 Script ID   : D-03b
 Description : Parameterized box using the user parameter
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_D_03b_Parameterized_box_using_the_user

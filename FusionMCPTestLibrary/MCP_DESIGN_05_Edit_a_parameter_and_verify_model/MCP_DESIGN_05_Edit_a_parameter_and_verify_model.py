@@ -4,7 +4,7 @@ MCP_DESIGN_05_Edit_a_parameter_and_verify_model
 Group       : Design
 Script ID   : DESIGN-05
 Description : Edit a parameter and verify model updates (parametric test)
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DESIGN_05_Edit_a_parameter_and_verify_model

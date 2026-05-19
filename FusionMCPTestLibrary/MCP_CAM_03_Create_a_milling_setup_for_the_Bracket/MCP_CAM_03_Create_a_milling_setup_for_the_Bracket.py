@@ -4,7 +4,7 @@ MCP_CAM_03_Create_a_milling_setup_for_the_Bracket
 Group       : Manufacture
 Script ID   : CAM-03
 Description : Create a milling setup for the Bracket part
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_CAM_03_Create_a_milling_setup_for_the_Bracket

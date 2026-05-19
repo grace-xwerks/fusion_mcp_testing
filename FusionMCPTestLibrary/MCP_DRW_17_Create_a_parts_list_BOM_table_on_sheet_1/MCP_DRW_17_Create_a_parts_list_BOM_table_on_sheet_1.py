@@ -4,7 +4,7 @@ MCP_DRW_17_Create_a_parts_list_BOM_table_on_sheet_1
 Group       : Drawings
 Script ID   : DRW-17
 Description : Create a parts list (BOM table) on sheet 1
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_17_Create_a_parts_list_BOM_table_on_sheet_1

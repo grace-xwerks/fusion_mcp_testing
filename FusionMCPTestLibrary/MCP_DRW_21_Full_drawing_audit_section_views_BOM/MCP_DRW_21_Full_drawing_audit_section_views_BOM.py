@@ -4,7 +4,7 @@ MCP_DRW_21_Full_drawing_audit_section_views_BOM
 Group       : Drawings
 Script ID   : DRW-21
 Description : Full drawing audit — section views + BOM + balloons
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DRW_21_Full_drawing_audit_section_views_BOM

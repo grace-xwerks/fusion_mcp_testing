@@ -4,7 +4,7 @@ MCP_DESIGN_02_Set_up_manufacturing_parameters
 Group       : Design
 Script ID   : DESIGN-02
 Description : Set up manufacturing parameters
-Generated   : 2026-05-18
+Generated   : 2026-05-19
 
 Part of the Fusion MCP Test Library.
 Run via: Fusion → Tools → Scripts and Add-Ins → Scripts tab → MCP_DESIGN_02_Set_up_manufacturing_parameters
