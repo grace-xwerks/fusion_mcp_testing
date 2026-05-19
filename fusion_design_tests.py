@@ -1416,7 +1416,7 @@ def run(_context: str):
         ("rotor_groove_w",     "6 mm",   "mm", "Groove width along X"),
         ("rotor_groove_depth", "3 mm",   "mm", "Groove radial depth"),
         ("rotor_flat_x0",      "70 mm",  "mm", "Milled flat start X (rotary_contour target)"),
-        ("rotor_flat_x1",      "90 mm",  "mm", "Milled flat end X"),
+        ("rotor_flat_x1",      "75 mm",  "mm", "Milled flat end X (5 mm clear of dome start)"),
         ("rotor_flat_inset",   "4 mm",   "mm", "Radial depth of milled flats from OD"),
     ]
 
