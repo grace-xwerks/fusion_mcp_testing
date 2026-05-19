@@ -188,28 +188,57 @@ def run(_context: str):
     op_input = setup.operations.createInput("adaptive2d")
     op_input.displayName = "2_Adaptive_Rough"
 
-    # Select a flat end mill (prefer 3/8" or 10mm diameter)
-    for i in range(cam.documentToolLibrary.count):
-        t = cam.documentToolLibrary.item(i)
-        dia = t.parameters.itemByName('tool_diameter').value * 10  # mm
-        if t.typeName == "flat end mill" and 8 <= dia <= 12:
-            op_input.tool = t
-            print(f"Tool: {t.description}  Ø{dia:.1f} mm")
+    # ── Load sample milling tool library ───────────────────────────────────
+    # Per quirks #21-#24: tools live on adsk.cam.CAMManager, libraries are
+    # SWIG URLVectors (len/[i]), urlByLocation is singular, sample mills are
+    # in "Milling Tools (Metric)".
+    tool_libs  = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    target_url = adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'
+    )
+    library = tool_libs.toolLibraryAtURL(target_url)
+
+    # Per quirk #25: Tool.typeName is gone — filter via parameters.
+    # Want a flat end mill (tool_isMill == True, straight tapered, Ø 8–10 mm).
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        is_mill = p.itemByName('tool_isMill').value
+        if not is_mill:
+            continue
+        taper = p.itemByName('tool_taperedType')
+        if taper and taper.value not in ('flat', 'straight', ''):
+            continue
+        dia_mm = p.itemByName('tool_diameter').value * 10
+        if 8.0 <= dia_mm <= 10.0:
+            chosen = t
             break
+
+    if chosen is None:
+        print("No 8–10 mm flat end mill found in 'Milling Tools (Metric)'.")
+        return
+
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}  Ø{chosen.parameters.itemByName('tool_diameter').value*10:.1f} mm")
 
     params = op_input.parameters
 
     # HEM parameters: high ADOC (full flute), low RDOC (~10% D)
-    # Per HEM Guidebook — lower RDOC + higher ADOC = consistent chip load
-    params.itemByName("tolerance").value           = adsk.core.ValueInput.createByString("0.02 mm")
-    params.itemByName("optimalLoad").value         = adsk.core.ValueInput.createByString("10%")   # RDOC = 10% D
-    params.itemByName("maximumStepdown").value     = adsk.core.ValueInput.createByString("8 mm")  # full flute ADOC
-    params.itemByName("stockToLeave").value        = adsk.core.ValueInput.createByString("0.3 mm")
-    params.itemByName("bothWays").value            = adsk.core.ValueInput.createByReal(0)          # climb only
+    params.itemByName("tolerance").expression       = "0.02 mm"
+    params.itemByName("optimalLoad").expression     = "10%"
+    params.itemByName("maximumStepdown").expression = "8 mm"
+    params.itemByName("stockToLeave").expression    = "0.3 mm"
 
+    # TODO(refactor): 2D Adaptive requires pocketRegion geometry (face/sketch
+    # chain pick). The 'pocketRegions' parameter is a CadContours2dParameterValue
+    # and needs a chain built from a body face — defer programmatic selection
+    # to the parent at validation time.
     op = setup.operations.add(op_input)
     print(f"Operation added: {op.name}  strategy={op.strategy}")
+    print(f"Setup: {setup.name}")
     print("HEM params: 10% RDOC / 8mm ADOC — constant chip load roughing")
+    print("NOTE: pocketRegions geometry NOT set (TODO for parent).")
 
 
 # =============================================================================
@@ -229,24 +258,48 @@ def run(_context: str):
     op_input = setup.operations.createInput("pocket2d")
     op_input.displayName = "3_Pocket_Finish"
 
-    for i in range(cam.documentToolLibrary.count):
-        t = cam.documentToolLibrary.item(i)
-        dia = t.parameters.itemByName('tool_diameter').value * 10
-        if t.typeName == "flat end mill" and 6 <= dia <= 8:
-            op_input.tool = t
-            print(f"Tool: {t.description}  Ø{dia:.1f} mm")
+    # ── Load sample milling tool library (see quirks #21-#24) ──────────────
+    tool_libs  = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    target_url = adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'
+    )
+    library = tool_libs.toolLibraryAtURL(target_url)
+
+    # 6 mm flat end mill — fits the Bracket's 2 mm pocket corner radius.
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        if not p.itemByName('tool_isMill').value:
+            continue
+        taper = p.itemByName('tool_taperedType')
+        if taper and taper.value not in ('flat', 'straight', ''):
+            continue
+        dia_mm = p.itemByName('tool_diameter').value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t
             break
 
-    params = op_input.parameters
-    params.itemByName("tolerance").value           = adsk.core.ValueInput.createByString("0.01 mm")
-    params.itemByName("stepover").value            = adsk.core.ValueInput.createByString("40%")
-    params.itemByName("maximumStepdown").value     = adsk.core.ValueInput.createByString("2 mm")
-    params.itemByName("stockToLeave").value        = adsk.core.ValueInput.createByString("0 mm")   # finish pass
-    params.itemByName("finishingPasses").value     = adsk.core.ValueInput.createByReal(1)
-    params.itemByName("finishStepover").value      = adsk.core.ValueInput.createByString("0.2 mm")
+    if chosen is None:
+        print("No ~6 mm flat end mill found in 'Milling Tools (Metric)'.")
+        return
 
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}  Ø{chosen.parameters.itemByName('tool_diameter').value*10:.1f} mm")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("stepover").expression        = "40%"
+    params.itemByName("maximumStepdown").expression = "2 mm"
+    params.itemByName("stockToLeave").expression    = "0 mm"
+
+    # TODO(refactor): 2D Pocket needs pocketRegions geometry — typically the
+    # pocket's bottom face. Same CadContours2dParameterValue picking problem
+    # as CAM-05. Defer to parent at validation.
     op = setup.operations.add(op_input)
     print(f"Operation added: {op.name}  strategy={op.strategy}")
+    print(f"Setup: {setup.name}")
+    print("NOTE: pocketRegions geometry NOT set (TODO for parent).")
 
 
 # =============================================================================
@@ -266,25 +319,47 @@ def run(_context: str):
     op_input = setup.operations.createInput("contour2d")
     op_input.displayName = "4_Contour_Outside"
 
-    for i in range(cam.documentToolLibrary.count):
-        t = cam.documentToolLibrary.item(i)
-        dia = t.parameters.itemByName('tool_diameter').value * 10
-        if t.typeName == "flat end mill" and 8 <= dia <= 12:
-            op_input.tool = t
-            print(f"Tool: {t.description}  Ø{dia:.1f} mm")
+    # ── Load sample milling tool library ───────────────────────────────────
+    tool_libs  = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    target_url = adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'
+    )
+    library = tool_libs.toolLibraryAtURL(target_url)
+
+    # 8–10 mm flat end mill for outside contour.
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        if not p.itemByName('tool_isMill').value:
+            continue
+        taper = p.itemByName('tool_taperedType')
+        if taper and taper.value not in ('flat', 'straight', ''):
+            continue
+        dia_mm = p.itemByName('tool_diameter').value * 10
+        if 8.0 <= dia_mm <= 10.0:
+            chosen = t
             break
 
-    params = op_input.parameters
-    params.itemByName("tolerance").value          = adsk.core.ValueInput.createByString("0.01 mm")
-    params.itemByName("maximumStepdown").value    = adsk.core.ValueInput.createByString("5 mm")
-    params.itemByName("stockToLeave").value       = adsk.core.ValueInput.createByString("0 mm")
-    params.itemByName("direction").value          = adsk.core.ValueInput.createByString("climb")
-    # Compensation: CDC (Cutter Diameter Compensation) — standard for contours
-    params.itemByName("compensation").value       = adsk.core.ValueInput.createByString("left")
+    if chosen is None:
+        print("No 8–10 mm flat end mill found in 'Milling Tools (Metric)'.")
+        return
 
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}  Ø{chosen.parameters.itemByName('tool_diameter').value*10:.1f} mm")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("maximumStepdown").expression = "5 mm"
+    params.itemByName("stockToLeave").expression    = "0 mm"
+
+    # TODO(refactor): 2D Contour needs a 'contourSelection' chain — the outer
+    # silhouette / bottom-edge loop of the Bracket body. CadContours2d picking
+    # from a body silhouette is non-trivial; defer to parent at validation.
     op = setup.operations.add(op_input)
+    print(f"Setup: {setup.name}")
     print(f"Operation added: {op.name}  strategy={op.strategy}")
-    print("CDC direction: left (climb milling, outside contour)")
+    print("NOTE: contour chain geometry NOT set (TODO for parent).")
 
 
 # =============================================================================
@@ -303,43 +378,75 @@ def run(_context: str):
 
     setup = cam.setups.item(0)
 
-    # ── Spot drill ───────────────────────────────────────────────────────────
+    # ── Load sample hole-making library (quirk #24) ────────────────────────
+    tool_libs  = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    drill_url  = adsk.core.URL.create(
+        'systemlibraryroot://Samples/Hole Making Tools (Metric)'
+    )
+    library = tool_libs.toolLibraryAtURL(drill_url)
+
+    # ── Find a spot drill (description contains 'spot') ────────────────────
+    spot = None
+    drill = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        desc = (t.description or '').lower()
+        is_drill = p.itemByName('tool_isDrill')
+        if is_drill is None or not is_drill.value:
+            continue
+        dia_mm = p.itemByName('tool_diameter').value * 10
+        if spot is None and ('spot' in desc or 'spotting' in desc) and 3.0 <= dia_mm <= 10.0:
+            spot = t
+            continue
+        if drill is None and 'drill' in desc and 'spot' not in desc and abs(dia_mm - 6.0) < 0.3:
+            drill = t
+
+    # ── Spot drill operation ───────────────────────────────────────────────
     sd_input = setup.operations.createInput("drill")
     sd_input.displayName = "5a_SpotDrill"
-
-    for i in range(cam.documentToolLibrary.count):
-        t = cam.documentToolLibrary.item(i)
-        if t.typeName in ("spot drill", "center drill"):
-            sd_input.tool = t
-            print(f"Spot drill tool: {t.description}")
-            break
+    if spot is not None:
+        sd_input.tool = spot
+        print(f"Spot drill tool: {spot.description}  "
+              f"Ø{spot.parameters.itemByName('tool_diameter').value*10:.2f} mm")
+    else:
+        print("No spot drill found in 'Hole Making Tools (Metric)'.")
+        return
 
     sd_params = sd_input.parameters
-    sd_params.itemByName("tolerance").value     = adsk.core.ValueInput.createByString("0.02 mm")
-    sd_params.itemByName("tipDepth").value      = adsk.core.ValueInput.createByString("1 mm")
-    setup.operations.add(sd_input)
+    sd_params.itemByName("tolerance").expression = "0.02 mm"
+    tip = sd_params.itemByName("tipDepth")
+    if tip is not None:
+        tip.expression = "1 mm"
 
-    # ── Through-drill ────────────────────────────────────────────────────────
+    # TODO(refactor): drilling operations need a 'holes' selection — typically
+    # the cylindrical faces of the four corner holes on the Bracket top face.
+    # Programmatic hole-feature selection from the body is non-trivial; defer
+    # to parent at validation.
+    sd_op = setup.operations.add(sd_input)
+    print(f"Spot drill op added: {sd_op.name}  strategy={sd_op.strategy}")
+
+    # ── Through-drill operation ────────────────────────────────────────────
     dr_input = setup.operations.createInput("drill")
     dr_input.displayName = "5b_Drill_6mm_Through"
-
-    for i in range(cam.documentToolLibrary.count):
-        t = cam.documentToolLibrary.item(i)
-        dia = t.parameters.itemByName('tool_diameter').value * 10
-        if t.typeName == "drill" and abs(dia - 6.0) < 0.1:
-            dr_input.tool = t
-            print(f"Drill tool: {t.description}  Ø{dia:.1f} mm")
-            break
+    if drill is not None:
+        dr_input.tool = drill
+        print(f"Drill tool: {drill.description}  "
+              f"Ø{drill.parameters.itemByName('tool_diameter').value*10:.2f} mm")
+    else:
+        print("No 6 mm drill found in 'Hole Making Tools (Metric)'.")
+        return
 
     dr_params = dr_input.parameters
-    dr_params.itemByName("tolerance").value       = adsk.core.ValueInput.createByString("0.02 mm")
-    dr_params.itemByName("cycleType").value       = adsk.core.ValueInput.createByString("chip_breaking")
-    dr_params.itemByName("peckingincrements").value = adsk.core.ValueInput.createByString("3 mm")
-    # Through all: set bottomHeight below stock
-    dr_params.itemByName("bottomHeight").value    = adsk.core.ValueInput.createByString("-22 mm")
+    dr_params.itemByName("tolerance").expression = "0.02 mm"
+    cycle = dr_params.itemByName("cycleType")
+    if cycle is not None:
+        cycle.expression = "'chip-breaking'"
 
     dr_op = setup.operations.add(dr_input)
-    print(f"Drill operation added: {dr_op.name}")
+    print(f"Drill op added: {dr_op.name}  strategy={dr_op.strategy}")
+    print(f"Setup: {setup.name}")
+    print("NOTE: hole geometry NOT set on either operation (TODO for parent).")
 
 
 # =============================================================================
