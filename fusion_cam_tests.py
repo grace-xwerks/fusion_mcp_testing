@@ -2678,3 +2678,116 @@ def run(_context: str):
         dia = p.itemByName('tool_diameter').value.value * 10
         tt  = p.itemByName('tool_type').value.value
         print(f"  D{dia:5.2f}mm  {tt:18s}  {t.description or t.productId}")
+
+
+# =============================================================================
+# CAM-47  Rotor rotary setup (Batch D prep)
+#         Creates a Milling Setup on the Rotor with RelativeCylinderStock and
+#         reorients the WCS so its Z aligns with the rotor's centerline.
+#
+#         Why this script exists — see memory `cam_stock_axis_misalignment.md`:
+#         when a design part isn't along world Z, Fusion's default
+#         RelativeCylinderStock wraps the part along Z anyway, producing a
+#         wrong-axis cylinder. Standard fix is option 2 (reorient WCS), not
+#         rebuild the part.
+#
+#         Quirks exercised:
+#           - `CadObjectParameterValue.value.value` MUST be a list, even for a
+#             single entity. Bare entity raises TypeError (vector expected).
+#           - ChoiceParameterValue strings are set via `.expression` with the
+#             literal quotes embedded, e.g. "'axesZX'".
+# =============================================================================
+
+import adsk.core, adsk.cam, adsk.fusion
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam:
+        print("Switch to Manufacture workspace first (run CAM-01).")
+        return
+
+    # Find the Rotor occurrence under the CAM-linked design root
+    rotor_occ = next(
+        (o for o in cam.designRootOccurrence.component.allOccurrences
+         if o.component.name == 'Rotor'),
+        None)
+    if rotor_occ is None:
+        print("Rotor occurrence not found — run DESIGN-29 / DESIGN-30 first.")
+        return
+    comp = rotor_occ.component
+    rotor = comp.bRepBodies.itemByName('Rotor')
+    if rotor is None:
+        print("Rotor body not found in 'Rotor' component.")
+        return
+
+    # Idempotent: reuse if we already made it
+    setup = next((s for s in cam.setups if s.name == 'RotorRotarySetup'), None)
+    if setup is None:
+        si = cam.setups.createInput(adsk.cam.OperationTypes.MillingOperation)
+        si.models = [rotor]
+        si.stockMode = adsk.cam.SetupStockModes.RelativeCylinderStock
+        setup = cam.setups.add(si)
+        setup.name = 'RotorRotarySetup'
+        print(f"Created setup: {setup.name}")
+    else:
+        print(f"Reusing setup: {setup.name}")
+
+    # Reorient WCS — Setup Z := rotor centerline (component X axis)
+    setup.parameters.itemByName('wcs_orientation_mode').expression = "'axesZX'"
+    setup.parameters.itemByName('wcs_orientation_axisZ').value.value = [comp.xConstructionAxis]
+    setup.parameters.itemByName('wcs_orientation_axisX').value.value = [comp.yConstructionAxis]
+
+    # Verify
+    dia = setup.parameters.itemByName('stockDiameter').expression
+    lng = setup.parameters.itemByName('stockLength').expression
+    print(f"Stock after reorient: Ø{dia} × {lng} (expect ~42 × 100 mm)")
+
+
+# =============================================================================
+# CAM-48  Batch D — Rotary + finishing-misc — ALL FIVE strategies in one run
+#         This is an intentional retest of quirk #9 (one-strategy-per-run).
+#         User explicitly opted in: recovery is easy if Fusion crashes.
+#
+#         Targets (in order): rotary_contour, rotary_pocket, rotary_finishing,
+#         deburr, geodesic. All against the RotorRotarySetup from CAM-47.
+#         No toolpaths generated here — just OperationInput creation, which is
+#         the same surface that crashed Fusion previously.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam:
+        print("Switch to Manufacture workspace first.")
+        return
+    setup = next((s for s in cam.setups if s.name == 'RotorRotarySetup'), None)
+    if setup is None:
+        print("RotorRotarySetup not found — run CAM-47 first.")
+        return
+
+    batch_d = ['rotary_contour', 'rotary_pocket', 'rotary_finishing',
+               'deburr', 'geodesic']
+
+    # First, sanity-check that each strategy is recognized + allowed under the
+    # current license/preview flags.
+    strat_objs = {}
+    for name in batch_d:
+        s = adsk.cam.OperationStrategy.createFromString(name)
+        strat_objs[name] = s
+        print(f"  {name:18s}  allowed={s.isGenerationAllowed}  "
+              f"rotary={s.isRotaryStrategy}  finishing={s.isFinishingStrategy}")
+
+    # Then create one OperationInput per strategy and add it to the setup.
+    # This is the exact pattern that crashed Fusion in earlier sessions.
+    print("\nCreating OperationInputs...")
+    for name in batch_d:
+        op_in = setup.operations.createInput(name)
+        op_in.displayName = f"Batch_D_{name}"
+        op = setup.operations.add(op_in)
+        print(f"  added: {op.name}  strategy={op.strategy}")
+
+    print(f"\nTotal operations on setup: {setup.operations.count}")
+    print("If you see this line, quirk #9 may have softened — update memory.")
