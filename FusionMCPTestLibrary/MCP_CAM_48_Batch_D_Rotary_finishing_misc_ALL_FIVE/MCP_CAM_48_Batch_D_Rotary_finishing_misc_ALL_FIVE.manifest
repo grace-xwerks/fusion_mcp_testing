@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-48: Batch D \u2014 Rotary + finishing-misc \u2014 ALL FIVE strategies in one run",
+  "id": "debb3200-3308-5be2-a26f-025f2c76647d"
+}

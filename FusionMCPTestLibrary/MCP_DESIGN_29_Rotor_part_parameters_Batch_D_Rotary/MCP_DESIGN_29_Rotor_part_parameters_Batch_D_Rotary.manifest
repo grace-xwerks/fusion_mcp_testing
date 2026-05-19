@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Design] DESIGN-29: Rotor part parameters (Batch D \u2014 Rotary stock for CAM-18a..e)",
+  "id": "bdba6697-948e-5f4d-877a-94b202e48a65"
+}
