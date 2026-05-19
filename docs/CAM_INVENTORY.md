@@ -120,14 +120,16 @@ useful when you want to inspect a strategy without spinning up a Setup.
 | `probe_geometry`  | Probe Geometry  |
 | `inspect_surface` | Inspect Surface |
 
-### Construction / organizational — uncovered (4)
+### Construction / organizational — covered by CAM-49..52 (4)
 
-| name                   | title                |
-|------------------------|----------------------|
-| `feature_construction` | Feature Construction (additive flag) |
-| `hole_recognition`     | Hole Recognition     |
-| `folder`               | Folder (op-folder container) |
-| `manual`               | Manual NC            |
+| name                   | title                | script  | notes |
+|------------------------|----------------------|---------|-------|
+| `folder`               | Folder               | CAM-49  | Returns `CAMFolder`, NOT `CAMOperation`. Does not increment `setup.operations.count`. |
+| `manual`               | Manual NC            | CAM-50  | Params: `manualType` (ChoiceParameterValue, 22 commands) + `comment` / `dwell`. Default `manualType='comment'`. |
+| `hole_recognition`     | Hole Recognition     | CAM-51  | Returns `CAMHoleRecognition`, NOT `CAMOperation`. No `hasToolpath` — produces hole groups for downstream drill ops, not a toolpath. |
+| `feature_construction` | Feature Construction | CAM-52  | Additive flag, but `isGenerationAllowed=True` and `add()` succeeds on a milling Setup. Generation needs real additive geometry. |
+
+(CAM-47 = rotor rotary setup, CAM-48 = Batch D 5-strategy retest — both landed via PR #12.)
 
 ### Turning (lathe) — uncovered (17)
 
