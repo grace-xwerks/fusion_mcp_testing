@@ -644,11 +644,12 @@ def run(_context: str):
     for i in range(setup.allOperations.count):
         op = setup.allOperations.item(i)
         if op.hasToolpath:
-            mt = cam.getMachiningTime(op, 1.0, 1.0)
-            # MachiningTime exposes machiningTimeInSeconds
-            secs = getattr(mt, 'machiningTimeInSeconds', None)
-            if secs is not None:
-                total_seconds += secs
+            # Signature: getMachiningTime(op, feedScale, rapidScale, toolChangeTime)
+            # Returned MachiningTime exposes .machiningTime (seconds), .feedDistance
+            # (cm), .rapidDistance (cm), .totalFeedTime, .totalRapidTime,
+            # .toolChangeCount, .totalToolChangeTime — NOT machiningTimeInSeconds.
+            mt = cam.getMachiningTime(op, 1.0, 1.0, 5.0)
+            total_seconds += mt.machiningTime
 
     print(f"Total cycle time: {total_seconds:.1f} s "
           f"({total_seconds/60:.2f} min)")
@@ -699,7 +700,9 @@ def run(_context: str):
     print(f"Post processor: {post_path}")
 
     output_folder = cam.temporaryFolder
-    program_name  = "Bracket"
+    # Haas posts treat programName as a numeric program number (O#####).
+    # A non-numeric string raises 'Program number NaN is out of range'.
+    program_name  = "1001"
 
     pp_input = adsk.cam.PostProcessInput.create(
         program_name,
@@ -707,7 +710,8 @@ def run(_context: str):
         output_folder,
         adsk.cam.PostOutputUnitOptions.DocumentUnitsOutput,
     )
-    pp_input.isOpenInEditor = False
+    pp_input.programComment   = "Bracket"
+    pp_input.isOpenInEditor   = False
 
     # Post the whole setup (new API accepts setup/operation/program directly)
     ok = cam.postProcess(setup, pp_input)
