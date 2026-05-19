@@ -313,21 +313,31 @@ def run(_context: str):
 
     params = op_input.parameters
 
-    # HEM parameters: high ADOC (full flute), low RDOC (~10% D)
+    # HEM parameters: low RDOC (~10% D), high ADOC (full flute).
+    # NOTE: 'optimalLoad' expects an expression like 'tool_diameter * 0.1'
+    # (10% of tool diameter). A bare '10%' fails to evaluate (quirk).
     params.itemByName("tolerance").expression       = "0.02 mm"
-    params.itemByName("optimalLoad").expression     = "10%"
+    params.itemByName("optimalLoad").expression     = "tool_diameter * 0.1"
     params.itemByName("maximumStepdown").expression = "8 mm"
     params.itemByName("stockToLeave").expression    = "0.3 mm"
 
-    # TODO(refactor): 2D Adaptive requires pocketRegion geometry (face/sketch
-    # chain pick). The 'pocketRegions' parameter is a CadContours2dParameterValue
-    # and needs a chain built from a body face — defer programmatic selection
-    # to the parent at validation time.
     op = setup.operations.add(op_input)
+
+    # Geometry: pocket bottom face at z = part_height - pocket_depth = 1.2 cm.
+    # The 'pockets' parameter is a CadContours2dParameterValue; populate via
+    # CurveSelections.createNewPocketSelection seeded by the pocket bottom face.
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    pocket_bottom = next(f for f in bracket.faces if abs(f.centroid.z - 1.2) < 0.05)
+    pockets_pv = op.parameters.itemByName('pockets').value
+    cs = pockets_pv.getCurveSelections(); cs.clear()
+    sel = cs.createNewPocketSelection(); sel.inputGeometry = [pocket_bottom]
+    pockets_pv.applyCurveSelections(cs)
+
     print(f"Operation added: {op.name}  strategy={op.strategy}")
     print(f"Setup: {setup.name}")
-    print("HEM params: 10% RDOC / 8mm ADOC — constant chip load roughing")
-    print("NOTE: pocketRegions geometry NOT set (TODO for parent).")
+    print("HEM params: optimalLoad=tool_diameter*0.1 (10% RDOC), 8mm ADOC stepdown")
+    print(f"Geometry: pocket bottom face ({pocket_bottom.boundingBox.maxPoint.x - pocket_bottom.boundingBox.minPoint.x:.1f} x "
+          f"{pocket_bottom.boundingBox.maxPoint.y - pocket_bottom.boundingBox.minPoint.y:.1f} cm)")
 
 
 # =============================================================================
@@ -376,18 +386,25 @@ def run(_context: str):
     print(f"Tool: {chosen.description}  Ø{chosen.parameters.itemByName('tool_diameter').value.value*10:.1f} mm")
 
     params = op_input.parameters
+    # Only set parameters that exist on pocket2d. 'stepover' is not present
+    # on this strategy in current Fusion 2703.x — issue #9 tracks a proper
+    # per-strategy parameter table.
     params.itemByName("tolerance").expression       = "0.01 mm"
-    params.itemByName("stepover").expression        = "40%"
     params.itemByName("maximumStepdown").expression = "2 mm"
     params.itemByName("stockToLeave").expression    = "0 mm"
 
-    # TODO(refactor): 2D Pocket needs pocketRegions geometry — typically the
-    # pocket's bottom face. Same CadContours2dParameterValue picking problem
-    # as CAM-05. Defer to parent at validation.
     op = setup.operations.add(op_input)
+
+    # Geometry: same pocket bottom face as CAM-05 Adaptive.
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    pocket_bottom = next(f for f in bracket.faces if abs(f.centroid.z - 1.2) < 0.05)
+    pockets_pv = op.parameters.itemByName('pockets').value
+    cs = pockets_pv.getCurveSelections(); cs.clear()
+    sel = cs.createNewPocketSelection(); sel.inputGeometry = [pocket_bottom]
+    pockets_pv.applyCurveSelections(cs)
+
     print(f"Operation added: {op.name}  strategy={op.strategy}")
-    print(f"Setup: {setup.name}")
-    print("NOTE: pocketRegions geometry NOT set (TODO for parent).")
+    print(f"Geometry: pocket bottom face")
 
 
 # =============================================================================
@@ -440,13 +457,20 @@ def run(_context: str):
     params.itemByName("maximumStepdown").expression = "5 mm"
     params.itemByName("stockToLeave").expression    = "0 mm"
 
-    # TODO(refactor): 2D Contour needs a 'contourSelection' chain — the outer
-    # silhouette / bottom-edge loop of the Bracket body. CadContours2d picking
-    # from a body silhouette is non-trivial; defer to parent at validation.
     op = setup.operations.add(op_input)
+
+    # Geometry: body silhouette (outer profile when viewed from above).
+    # CurveSelections.createNewSilhouetteSelection() seeded by the body
+    # produces the outer contour chain automatically — no manual edge picking.
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    contours_pv = op.parameters.itemByName('contours').value
+    cs = contours_pv.getCurveSelections(); cs.clear()
+    sel = cs.createNewSilhouetteSelection(); sel.inputGeometry = [bracket]
+    contours_pv.applyCurveSelections(cs)
+
     print(f"Setup: {setup.name}")
     print(f"Operation added: {op.name}  strategy={op.strategy}")
-    print("NOTE: contour chain geometry NOT set (TODO for parent).")
+    print(f"Geometry: Bracket body silhouette (outer 2D contour)")
 
 
 # =============================================================================
@@ -506,12 +530,20 @@ def run(_context: str):
     if tip is not None:
         tip.expression = "1 mm"
 
-    # TODO(refactor): drilling operations need a 'holes' selection — typically
-    # the cylindrical faces of the four corner holes on the Bracket top face.
-    # Programmatic hole-feature selection from the body is non-trivial; defer
-    # to parent at validation.
     sd_op = setup.operations.add(sd_input)
-    print(f"Spot drill op added: {sd_op.name}  strategy={sd_op.strategy}")
+
+    # Geometry: 4 cylindrical hole faces filtered by radius (M6 = 0.3 cm).
+    # The 'holeFaces' parameter is a CadObjectParameterValue whose inner
+    # .value is an assignable list of BRepFace. Be careful to filter:
+    # the Bracket also has pocket-corner fillet faces (cylindrical, r=0.2 cm)
+    # which would be drilled too if not excluded.
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    m6_cyls = [f for f in bracket.faces
+               if isinstance(f.geometry, adsk.core.Cylinder)
+               and abs(f.geometry.radius - 0.3) < 0.05]
+    sd_op.parameters.itemByName('holeFaces').value.value = m6_cyls
+    print(f"Spot drill op added: {sd_op.name}  strategy={sd_op.strategy}  "
+          f"({len(m6_cyls)} holes)")
 
     # ── Through-drill operation ────────────────────────────────────────────
     dr_input = setup.operations.createInput("drill")
@@ -531,9 +563,11 @@ def run(_context: str):
         cycle.expression = "'chip-breaking'"
 
     dr_op = setup.operations.add(dr_input)
-    print(f"Drill op added: {dr_op.name}  strategy={dr_op.strategy}")
+    # Geometry: same 4 M6 corner holes (already filtered above).
+    dr_op.parameters.itemByName('holeFaces').value.value = m6_cyls
+    print(f"Drill op added: {dr_op.name}  strategy={dr_op.strategy}  "
+          f"({len(m6_cyls)} holes)")
     print(f"Setup: {setup.name}")
-    print("NOTE: hole geometry NOT set on either operation (TODO for parent).")
 
 
 # =============================================================================
@@ -587,13 +621,22 @@ def run(_context: str):
     params.itemByName("chamferWidth").expression = "1 mm"
     params.itemByName("tolerance").expression    = "0.01 mm"
 
-    # TODO(refactor): select the top perimeter edges programmatically and pass
-    # them via op_input.parameters.itemByName('chainSelections') / contour
-    # selections. Without an explicit geometry selection, the operation will
-    # be created but flagged invalid until edges are picked in the UI.
-
     op = setup.operations.add(op_input)
+
+    # Geometry: top face's outer contour. Use createNewFaceContourSelection
+    # — picking the top face automatically gives its outer perimeter chain.
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    top_candidates = [f for f in bracket.faces if abs(f.centroid.z - 2.0) < 0.05]
+    top_face = max(top_candidates,
+                   key=lambda f: (f.boundingBox.maxPoint.x - f.boundingBox.minPoint.x)
+                               * (f.boundingBox.maxPoint.y - f.boundingBox.minPoint.y))
+    contours_pv = op.parameters.itemByName('contours').value
+    cs = contours_pv.getCurveSelections(); cs.clear()
+    sel = cs.createNewFaceContourSelection(); sel.inputGeometry = [top_face]
+    contours_pv.applyCurveSelections(cs)
+
     print(f"Operation added: {op.name}")
+    print(f"Geometry: top face contour (outer perimeter)")
 
 
 # =============================================================================
