@@ -297,9 +297,8 @@ def run(_context: str):
         is_mill = p.itemByName('tool_isMill').value.value
         if not is_mill:
             continue
-        taper = p.itemByName('tool_taperedType')
-        if taper and taper.value.value not in ('flat', 'straight', ''):
-            continue
+        # Drop taper filter — it's about shank shape, not tip. The
+        # 'flat' check in the description below is the right filter.
         dia_mm = p.itemByName('tool_diameter').value.value * 10
         if 8.0 <= dia_mm <= 10.0:
             chosen = t
@@ -362,9 +361,8 @@ def run(_context: str):
         p = t.parameters
         if not p.itemByName('tool_isMill').value.value:
             continue
-        taper = p.itemByName('tool_taperedType')
-        if taper and taper.value.value not in ('flat', 'straight', ''):
-            continue
+        # Drop taper filter — it's about shank shape, not tip. The
+        # 'flat' check in the description below is the right filter.
         dia_mm = p.itemByName('tool_diameter').value.value * 10
         if 5.5 <= dia_mm <= 6.5:
             chosen = t
@@ -423,9 +421,8 @@ def run(_context: str):
         p = t.parameters
         if not p.itemByName('tool_isMill').value.value:
             continue
-        taper = p.itemByName('tool_taperedType')
-        if taper and taper.value.value not in ('flat', 'straight', ''):
-            continue
+        # Drop taper filter — it's about shank shape, not tip. The
+        # 'flat' check in the description below is the right filter.
         dia_mm = p.itemByName('tool_diameter').value.value * 10
         if 8.0 <= dia_mm <= 10.0:
             chosen = t
