@@ -9,9 +9,15 @@ PREREQUISITE: The Bracket part from Design scripts should be open.
 Fusion Drawings work on a separate DrawingDocument that references
 the Design document.
 
-adsk.fusion namespace covers Drawings (no separate adsk.drawing module).
-Key classes: Drawing, DrawingSheet, DrawingView, DrawingDimension,
-             DrawingNote, DrawingBalloon, DrawingTableView
+In Fusion 2703.x Insider, Drawings live in their own submodule
+**adsk.drawing** (sibling of adsk.cam and adsk.fusion). This is the
+same drift pattern as CAM — see issues #3 (#27, #28) and #10.
+
+Key classes (from dir(adsk.drawing)):
+  Drawing, DrawingDocument, DrawingExportManager, DrawingExportOptions,
+  CreateDrawingInput, DrawingCreationModes,
+  CustomTable, CustomTableInput, CustomTables,
+  ASMESheetSizes, DimensionStrategyTypes, ...
 """
 
 # =============================================================================
@@ -19,7 +25,7 @@ Key classes: Drawing, DrawingSheet, DrawingView, DrawingDimension,
 #         If not, prints how to create one.
 # =============================================================================
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app  = adsk.core.Application.get()
@@ -49,7 +55,7 @@ def run(_context: str):
         print("To create one: File > New Drawing > From Design")
         print("Then run DRW-02 to inspect it via MCP.")
     else:
-        drw = adsk.fusion.Drawing.cast(prod)
+        drw = adsk.drawing.Drawing.cast(prod)
         print(f"Drawing sheets: {drw.sheets.count}")
 
 
@@ -58,11 +64,11 @@ def run(_context: str):
 #         Run after opening a drawing in Fusion.
 # =============================================================================
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active. Open or create a drawing document first.")
@@ -70,37 +76,74 @@ def run(_context: str):
 
     print(f"=== Drawing Inventory ===")
     print(f"Document : {drw.parentDocument.name}")
-    print(f"Sheets   : {drw.sheets.count}")
 
-    for s_idx in range(drw.sheets.count):
-        sheet = drw.sheets.item(s_idx)
+    # TODO(refactor): Probe whether Drawing exposes `sheets` directly. In
+    # 2703.x Insider the attribute name may have shifted (e.g. activeSheet,
+    # drawingSheets). dir(drw) will reveal the right collection name.
+    print(f"Drawing attrs sample: {[a for a in dir(drw) if not a.startswith('_')][:20]}")
+
+    sheets = getattr(drw, 'sheets', None)
+    if sheets is None:
+        print("TODO(refactor): adsk.drawing.Drawing has no `sheets` attribute on this build.")
+        return
+
+    print(f"Sheets   : {sheets.count}")
+
+    for s_idx in range(sheets.count):
+        sheet = sheets.item(s_idx)
         print(f"\n  Sheet [{s_idx}]: {sheet.name}")
-        print(f"    Size   : {sheet.paperSize}")
-        print(f"    Views  : {sheet.drawingViews.count}")
+        # TODO(refactor): DrawingSheet attribute names on adsk.drawing may differ.
+        # Old assumptions: paperSize, drawingViews. Probe with dir(sheet).
+        print(f"    Sheet attrs: {[a for a in dir(sheet) if not a.startswith('_')][:25]}")
 
-        for v_idx in range(sheet.drawingViews.count):
-            view = sheet.drawingViews.item(v_idx)
-            print(f"      View [{v_idx}]: {view.name:25s}  "
-                  f"type={view.drawingViewType}  "
-                  f"scale=1:{int(1/view.scale) if view.scale < 1 else int(view.scale)}")
+        paper = getattr(sheet, 'paperSize', '?')
+        views = getattr(sheet, 'drawingViews', None)
+        print(f"    Size   : {paper}")
+        if views is None:
+            print("    TODO(refactor): no `drawingViews` collection on DrawingSheet.")
+            continue
+        print(f"    Views  : {views.count}")
 
-            # Dimensions within this view
-            dims = view.drawingDimensions
+        for v_idx in range(views.count):
+            view = views.item(v_idx)
+            # TODO(refactor): DrawingView attribute names. Old assumptions:
+            # drawingViewType, scale, drawingDimensions. Probe with dir(view).
+            vtype = getattr(view, 'drawingViewType', '?')
+            vscale = getattr(view, 'scale', None)
+            scale_str = (
+                f"1:{int(1/vscale) if vscale < 1 else int(vscale)}"
+                if isinstance(vscale, (int, float)) and vscale != 0
+                else "?"
+            )
+            print(f"      View [{v_idx}]: {view.name:25s}  type={vtype}  scale={scale_str}")
+
+            dims = getattr(view, 'drawingDimensions', None)
+            if dims is None:
+                print("        TODO(refactor): no `drawingDimensions` on DrawingView.")
+                continue
             print(f"        Dimensions: {dims.count}")
             for d_idx in range(min(dims.count, 5)):
                 d = dims.item(d_idx)
-                print(f"          [{d_idx}] {d.drawingDimensionType}  "
-                      f"value={d.text.formattedText if hasattr(d.text, 'formattedText') else '?'}")
+                dtype = getattr(d, 'drawingDimensionType', '?')
+                text  = getattr(d, 'text', None)
+                value = getattr(text, 'formattedText', '?') if text is not None else '?'
+                print(f"          [{d_idx}] {dtype}  value={value}")
 
 
 # =============================================================================
-# DRW-03  Create a new drawing document from the active Design
+# DRW-03  Create a new drawing document from the active Design  [BLOCKED on #28]
 #         Programmatically creates drawing + A-size sheet.
 # =============================================================================
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
+    # TODO(#28): CreateDrawingInput has no public Python factory in 2703.x
+    # Insider. Manual UI creation (File > New Drawing > From Design) is the
+    # only known path. Run DRW-04..21 against a drawing the user has created
+    # in the UI. The code below attempts the documented new-API path and
+    # prints a diagnostic if it fails, so we can re-validate once Autodesk
+    # exposes the factory.
     app = adsk.core.Application.get()
 
     # Find the active design document
@@ -117,59 +160,103 @@ def run(_context: str):
         print("No design document found. Open the Bracket part first.")
         return
 
-    # Create a new drawing document
+    # Probe what's available on adsk.drawing for drawing creation.
+    drw_symbols = [s for s in dir(adsk.drawing) if 'Creat' in s or 'Input' in s or 'Mode' in s]
+    print(f"adsk.drawing creation-related symbols: {drw_symbols}")
+
+    # Attempt the documented input pattern. If CreateDrawingInput has no
+    # public factory, this will fail loudly — by design (no try/except).
+    # Common patterns to try (any of which Autodesk may eventually expose):
+    #   app.documents.add(adsk.core.DocumentTypes.DrawingDocumentType, ...)
+    #   adsk.drawing.CreateDrawingInput.create(...)
+    #   design_drawing_manager.createDrawingInput(...)
+    print("Attempting legacy DocumentTypes.DrawingDocumentType path...")
     drawing_doc = app.documents.add(
         adsk.core.DocumentTypes.DrawingDocumentType,
-        app.data.activeProject,  # active project in hub
-        True                     # open the document
+        app.data.activeProject,
+        True
     )
 
     print(f"Drawing document created: {drawing_doc.name}")
 
-    drw = adsk.fusion.Drawing.cast(drawing_doc.products.item(0))
+    drw = adsk.drawing.Drawing.cast(drawing_doc.products.item(0))
+    if not drw:
+        print("TODO(#28): cast to adsk.drawing.Drawing failed — productType drift.")
+        return
     print(f"Drawing product cast OK")
-    print(f"Default sheets: {drw.sheets.count}")
 
-    # Rename first sheet
-    if drw.sheets.count > 0:
-        sheet = drw.sheets.item(0)
+    sheets = getattr(drw, 'sheets', None)
+    if sheets is None:
+        print("TODO(refactor): drw.sheets missing in adsk.drawing — probe dir(drw).")
+        return
+
+    print(f"Default sheets: {sheets.count}")
+    if sheets.count > 0:
+        sheet = sheets.item(0)
         sheet.name = "Sheet1_Front_Side"
-        print(f"Sheet renamed: {sheet.name}  size={sheet.paperSize}")
+        paper = getattr(sheet, 'paperSize', '?')
+        print(f"Sheet renamed: {sheet.name}  size={paper}")
 
 
 # =============================================================================
 # DRW-04  Add a base view (front view) to the active drawing sheet
 # =============================================================================
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active. Run DRW-03 or open a drawing first.")
         return
 
-    sheet = drw.sheets.item(0)
+    sheets = getattr(drw, 'sheets', None)
+    if sheets is None or sheets.count == 0:
+        print("No sheets on drawing.")
+        return
+    sheet = sheets.item(0)
 
     # Find the linked design's root component
-    # The drawing has a reference to the source design
-    refs = drw.referencedDocuments
+    refs = getattr(drw, 'referencedDocuments', None)
+    if refs is None:
+        print("TODO(refactor): drw.referencedDocuments missing on adsk.drawing.Drawing.")
+        return
     print(f"Referenced documents: {refs.count}")
 
-    # Add base view input
-    view_input = sheet.drawingViews.createBaseViewInput()
+    views_col = getattr(sheet, 'drawingViews', None)
+    if views_col is None:
+        print("TODO(refactor): sheet.drawingViews missing on adsk.drawing.DrawingSheet.")
+        return
+
+    # TODO(refactor): Probe the actual base-view input class name on
+    # adsk.drawing. The old name was DrawingViewInput / createBaseViewInput;
+    # orientation/style enums lived under adsk.fusion.DrawingViewOrientations
+    # and adsk.fusion.DrawingViewStyles. On adsk.drawing they may be flat
+    # module-level enums (e.g. adsk.drawing.DrawingViewOrientations).
+    print(f"drawingViews methods: {[m for m in dir(views_col) if 'Input' in m or 'add' in m or 'create' in m]}")
+
+    view_input = views_col.createBaseViewInput()
     view_input.referencedDocument = refs.item(0) if refs.count > 0 else None
 
-    # Position: center of A-size sheet (in mm)
-    # A-size (ANSI A) = 215.9 x 279.4 mm — place front view at ~1/3 from left
-    view_input.position = adsk.core.Point3D.create(7.0, 10.0, 0)   # cm
-    view_input.scale    = 0.5    # 1:2 scale — part is 100mm, sheet is ~280mm
-    view_input.viewOrientation = adsk.fusion.DrawingViewOrientations.FrontViewOrientation
-    view_input.viewStyle = adsk.fusion.DrawingViewStyles.VisibleAndHiddenEdgesViewStyle
+    # Position: center of A-size sheet (in cm; Fusion API uses centimeters)
+    view_input.position = adsk.core.Point3D.create(7.0, 10.0, 0)
+    view_input.scale    = 0.5    # 1:2
 
-    base_view = sheet.drawingViews.addBaseView(view_input)
+    # Orientation/style enums — try adsk.drawing first, fall back to TODO.
+    orient_enum = getattr(adsk.drawing, 'DrawingViewOrientations', None)
+    style_enum  = getattr(adsk.drawing, 'DrawingViewStyles', None)
+    if orient_enum is not None:
+        view_input.viewOrientation = orient_enum.FrontViewOrientation
+    else:
+        print("TODO(refactor): adsk.drawing.DrawingViewOrientations not found.")
+    if style_enum is not None:
+        view_input.viewStyle = style_enum.VisibleAndHiddenEdgesViewStyle
+    else:
+        print("TODO(refactor): adsk.drawing.DrawingViewStyles not found.")
+
+    base_view = views_col.addBaseView(view_input)
     print(f"Base view added: {base_view.name}")
     print(f"  Orientation : Front")
     print(f"  Scale       : 1:2")
@@ -181,100 +268,143 @@ def run(_context: str):
 #         Depends on DRW-04 base view being present.
 # =============================================================================
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
-    if not drw or drw.sheets.count == 0:
+    sheets = getattr(drw, 'sheets', None) if drw else None
+    if not drw or sheets is None or sheets.count == 0:
         print("No drawing or sheet found.")
         return
 
-    sheet = drw.sheets.item(0)
+    sheet     = sheets.item(0)
+    views_col = getattr(sheet, 'drawingViews', None)
+    if views_col is None:
+        print("TODO(refactor): sheet.drawingViews missing on adsk.drawing.DrawingSheet.")
+        return
 
-    if sheet.drawingViews.count == 0:
+    if views_col.count == 0:
         print("No base view found. Run DRW-04 first.")
         return
 
-    base_view = sheet.drawingViews.item(0)
+    base_view = views_col.item(0)
+
+    # TODO(refactor): Probe createProjectedViewInput / addProjectedView names.
+    # Orientation enum may now live at adsk.drawing.DrawingViewOrientations.
+    orient_enum = getattr(adsk.drawing, 'DrawingViewOrientations', None)
 
     # Top view — above the base view
-    top_input          = sheet.drawingViews.createProjectedViewInput(base_view)
-    top_input.position = adsk.core.Point3D.create(7.0, 17.0, 0)  # above
-    top_view           = sheet.drawingViews.addProjectedView(top_input)
+    top_input          = views_col.createProjectedViewInput(base_view)
+    top_input.position = adsk.core.Point3D.create(7.0, 17.0, 0)
+    top_view           = views_col.addProjectedView(top_input)
     print(f"Top view added: {top_view.name}")
 
     # Right view — to the right of base view
-    right_input          = sheet.drawingViews.createProjectedViewInput(base_view)
-    right_input.position = adsk.core.Point3D.create(14.0, 10.0, 0)  # right
-    right_view           = sheet.drawingViews.addProjectedView(right_input)
+    right_input          = views_col.createProjectedViewInput(base_view)
+    right_input.position = adsk.core.Point3D.create(14.0, 10.0, 0)
+    right_view           = views_col.addProjectedView(right_input)
     print(f"Right view added: {right_view.name}")
 
     # Isometric view — upper right
-    iso_input                = sheet.drawingViews.createProjectedViewInput(base_view)
-    iso_input.position       = adsk.core.Point3D.create(20.0, 17.0, 0)
-    iso_input.viewOrientation = adsk.fusion.DrawingViewOrientations.HomeViewOrientation
-    iso_view                 = sheet.drawingViews.addProjectedView(iso_input)
+    iso_input          = views_col.createProjectedViewInput(base_view)
+    iso_input.position = adsk.core.Point3D.create(20.0, 17.0, 0)
+    if orient_enum is not None:
+        iso_input.viewOrientation = orient_enum.HomeViewOrientation
+    else:
+        print("TODO(refactor): adsk.drawing.DrawingViewOrientations not found for iso view.")
+    iso_view = views_col.addProjectedView(iso_input)
     print(f"Iso view added: {iso_view.name}")
 
-    print(f"\nTotal views on sheet: {sheet.drawingViews.count}")
+    print(f"\nTotal views on sheet: {views_col.count}")
 
 
 # =============================================================================
 # DRW-06  Add linear dimensions to the front view
 # =============================================================================
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
-    if not drw or drw.sheets.count == 0:
+    sheets = getattr(drw, 'sheets', None) if drw else None
+    if not drw or sheets is None or sheets.count == 0:
         print("No drawing found.")
         return
 
-    sheet     = drw.sheets.item(0)
-    base_view = sheet.drawingViews.item(0)
+    sheet      = sheets.item(0)
+    views_col  = getattr(sheet, 'drawingViews', None)
+    if views_col is None or views_col.count == 0:
+        print("No views on sheet — run DRW-04 first.")
+        return
+    base_view  = views_col.item(0)
 
     print(f"Base view: {base_view.name}")
-    print(f"Visible edges in view: {base_view.curves.count}")
+    curves = getattr(base_view, 'curves', None)
+    if curves is None:
+        print("TODO(refactor): base_view.curves missing on adsk.drawing.DrawingView.")
+        return
+    print(f"Visible edges in view: {curves.count}")
 
-    # Auto-detect the two leftmost and rightmost points to drive a width dim
-    # In practice you'd select specific edges by their 3D geometry match;
-    # here we demonstrate the API pattern with the bounding geometry.
-    curves = base_view.curves
     if curves.count < 2:
         print("Not enough curves in view to dimension. Ensure DRW-04 ran correctly.")
         return
 
-    # Add a linear dimension between first two visible edges
-    dim_input = sheet.drawingDimensions.createLinearDimensionInput(
-        curves.item(0),   # first edge
-        curves.item(1),   # second edge (Fusion picks nearest parallel pair)
-        adsk.core.Point3D.create(7.0, 7.5, 0),   # dimension line position
-        adsk.fusion.DrawingLinearDimensionOrientations.HorizontalLinearDimension
+    dims_col = getattr(sheet, 'drawingDimensions', None)
+    if dims_col is None:
+        print("TODO(refactor): sheet.drawingDimensions missing on adsk.drawing.DrawingSheet.")
+        return
+
+    # TODO(refactor): The linear-dim orientation enum used to live at
+    # adsk.fusion.DrawingLinearDimensionOrientations. On adsk.drawing it
+    # is likely adsk.drawing.DrawingLinearDimensionOrientations. The
+    # createLinearDimensionInput signature may also have changed.
+    lin_orient_enum = getattr(adsk.drawing, 'DrawingLinearDimensionOrientations', None)
+    if lin_orient_enum is None:
+        print("TODO(refactor): adsk.drawing.DrawingLinearDimensionOrientations not found.")
+        return
+
+    dim_input = dims_col.createLinearDimensionInput(
+        curves.item(0),
+        curves.item(1),
+        adsk.core.Point3D.create(7.0, 7.5, 0),
+        lin_orient_enum.HorizontalLinearDimension
     )
-    dim = sheet.drawingDimensions.addLinearDimension(dim_input)
-    print(f"Linear dimension added: {dim.text.formattedText if hasattr(dim, 'text') else 'OK'}")
+    dim = dims_col.addLinearDimension(dim_input)
+    text = getattr(dim, 'text', None)
+    formatted = getattr(text, 'formattedText', 'OK') if text is not None else 'OK'
+    print(f"Linear dimension added: {formatted}")
 
 
 # =============================================================================
 # DRW-07  Add a drawing note (title block / general tolerance note)
 # =============================================================================
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
-    if not drw or drw.sheets.count == 0:
+    sheets = getattr(drw, 'sheets', None) if drw else None
+    if not drw or sheets is None or sheets.count == 0:
         print("No drawing found.")
         return
 
-    sheet = drw.sheets.item(0)
+    sheet = sheets.item(0)
+
+    # TODO(refactor): sheet.drawingNotes may have a different attr name on
+    # adsk.drawing. Old API: sheet.drawingNotes.createInput(pos) -> set .text
+    # -> sheet.drawingNotes.add(input). Probe with dir(sheet) for the right
+    # collection name (could be `notes`, `drawingNotes`, `annotations`, ...).
+    notes_col = getattr(sheet, 'drawingNotes', None)
+    if notes_col is None:
+        print("TODO(refactor): sheet.drawingNotes missing on adsk.drawing.DrawingSheet.")
+        print(f"  Probe attrs: {[a for a in dir(sheet) if 'ote' in a.lower() or 'nnot' in a.lower()]}")
+        return
 
     notes = [
         (adsk.core.Point3D.create(1.0, 1.5, 0),
@@ -286,12 +416,12 @@ def run(_context: str):
     ]
 
     for pos, text in notes:
-        note_input = sheet.drawingNotes.createInput(pos)
+        note_input = notes_col.createInput(pos)
         note_input.text = text
-        note = sheet.drawingNotes.add(note_input)
+        note = notes_col.add(note_input)
         print(f"Note added: {text[:50]}...")
 
-    print(f"\nTotal notes on sheet: {sheet.drawingNotes.count}")
+    print(f"\nTotal notes on sheet: {notes_col.count}")
 
 
 # =============================================================================
