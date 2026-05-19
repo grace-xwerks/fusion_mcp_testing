@@ -26,14 +26,19 @@ import adsk.core, adsk.cam
 
 def run(_context: str):
     app  = adsk.core.Application.get()
-    prod = app.activeProduct
+    ui   = app.userInterface
 
+    # Switch to the Manufacture workspace if it isn't active.
+    if ui.activeWorkspace.id != 'CAMEnvironment':
+        ui.workspaces.itemById('CAMEnvironment').activate()
+
+    prod = app.activeProduct
+    print(f"Active workspace   : {ui.activeWorkspace.id}")
     print(f"Active product type: {prod.productType}")
 
     cam = adsk.cam.CAM.cast(prod)
     if not cam:
-        print("ERROR: Not in the Manufacture workspace.")
-        print("Switch to Manufacture in Fusion before running CAM scripts.")
+        print("ERROR: activeProduct is not a CAM product even after switching.")
         return
 
     print(f"CAM product cast OK")
@@ -51,7 +56,8 @@ def run(_context: str):
 
 # =============================================================================
 # CAM-02  Inspect the tool library
-#         Lists tools available in the local (document) library.
+#         Walks LibraryLocations enum, then loads two Fusion sample libraries
+#         and prints the first 5 tools of each.
 # =============================================================================
 
 import adsk.core, adsk.cam
@@ -60,33 +66,71 @@ def run(_context: str):
     app = adsk.core.Application.get()
     cam = adsk.cam.CAM.cast(app.activeProduct)
     if not cam:
-        print("Switch to Manufacture workspace first.")
+        print("Switch to Manufacture workspace first (run CAM-01).")
         return
 
-    # Document tool library
-    lib_mgr  = cam.documentToolLibrary
-    print(f"Document tool library tool count: {lib_mgr.count}")
+    # ---- 1. Document tool library ------------------------------------------------
+    # A fresh design has no document-local tools; tools land here once you import
+    # them from a sample/cloud library or add them via the Tool Library dialog.
+    doc_lib = cam.documentToolLibrary
+    print(f"Document tool library tool count: {doc_lib.count}")
+    print("  (expected 0 for a fresh design — tools must be imported first)")
 
-    for i in range(min(lib_mgr.count, 20)):   # cap at 20 for output sanity
-        tool = lib_mgr.item(i)
-        print(f"  [{i:2d}] {tool.description or tool.productId:40s}  "
-              f"dia={tool.parameters.itemByName('tool_diameter').value*10:.2f} mm  "
-              f"type={tool.typeName}")
+    # ---- 2. Walk every LibraryLocation -------------------------------------------
+    # Per quirks #21/#22/#23: use CAMManager.libraryManager.toolLibraries,
+    # urlByLocation (singular), and treat childAssetURLs as a SWIG URLVector
+    # (len() / [i], NOT .count / .item(i)).
+    tl = adsk.cam.CAMManager.get().libraryManager.toolLibraries
 
-    print(f"\n  (Showing up to 20 of {lib_mgr.count})")
+    locations = [
+        ('CloudLibraryLocation',          adsk.cam.LibraryLocations.CloudLibraryLocation),
+        ('ExternalLibraryLocation',       adsk.cam.LibraryLocations.ExternalLibraryLocation),
+        ('Fusion360LibraryLocation',      adsk.cam.LibraryLocations.Fusion360LibraryLocation),
+        ('HubLibraryLocation',            adsk.cam.LibraryLocations.HubLibraryLocation),
+        ('LocalLibraryLocation',          adsk.cam.LibraryLocations.LocalLibraryLocation),
+        ('NetworkLibraryLocation',        adsk.cam.LibraryLocations.NetworkLibraryLocation),
+        ('OnlineSamplesLibraryLocation',  adsk.cam.LibraryLocations.OnlineSamplesLibraryLocation),
+    ]
 
-    # Also report the Fusion sample library path for reference
-    lib_urls = cam.libraryManager.toolLibraries.urlsByFolder(
-        adsk.cam.LibraryFolders.LocalLibraryFolder
-    )
-    print(f"\nLocal library URLs ({lib_urls.count}):")
-    for i in range(lib_urls.count):
-        print(f"  {lib_urls.item(i).toString()}")
+    print("\nLibrary locations:")
+    for label, loc in locations:
+        root = tl.urlByLocation(loc)
+        if not root:
+            print(f"  {label:32s}  (no root URL)")
+            continue
+        assets = tl.childAssetURLs(root)
+        print(f"  {label:32s}  root={root.toString()}  assets={len(assets)}")
+        for i in range(len(assets)):
+            print(f"      [{i}] {assets[i].toString()}")
+
+    # ---- 3. Inspect the two real Fusion sample libraries -------------------------
+    # Quirk #24: 'Cutting Tools (Metric)' has only 3 jet-cutter entries; the real
+    # mill/drill libraries live under different names.
+    sample_urls = [
+        'systemlibraryroot://Samples/Milling Tools (Metric)',
+        'systemlibraryroot://Samples/Hole Making Tools (Metric)',
+    ]
+
+    for sample_url_str in sample_urls:
+        print(f"\nLibrary: {sample_url_str}")
+        sample_url = adsk.core.URL.create(sample_url_str)
+        lib = tl.toolLibraryAtURL(sample_url)
+        if not lib:
+            print("  (could not load)")
+            continue
+        # ToolLibrary IS a Collection — use .count / .item(i) here (quirk #22).
+        print(f"  tool count: {lib.count}")
+        for i in range(min(5, lib.count)):
+            tool = lib.item(i)
+            desc = tool.description or tool.productId or '(no description)'
+            dia_param = tool.parameters.itemByName('tool_diameter')
+            dia_mm = dia_param.value * 10 if dia_param else float('nan')
+            print(f"    [{i}] {desc[:50]:50s}  Ø{dia_mm:.2f} mm")
 
 
 # =============================================================================
 # CAM-03  Create a milling setup for the Bracket part
-#         Sets up WCS at top-left corner of stock (typical VMC setup).
+#         WCS placement at top-left vertex is a TODO — using default origin.
 # =============================================================================
 
 import adsk.core, adsk.cam, adsk.fusion
@@ -95,41 +139,51 @@ def run(_context: str):
     app = adsk.core.Application.get()
     cam = adsk.cam.CAM.cast(app.activeProduct)
     if not cam:
-        print("Switch to Manufacture workspace first.")
+        print("Switch to Manufacture workspace first (run CAM-01).")
         return
 
-    des  = adsk.fusion.Design.cast(
-        app.documents.itemByName(cam.designRootName).products.item(0)
-    ) if False else None  # we'll use cam's linked design
+    # Idempotent: reuse an existing milling setup if one is already present.
+    existing = None
+    for i in range(cam.setups.count):
+        s = cam.setups.item(i)
+        if s.name == 'BracketMillingSetup':
+            existing = s
+            break
 
-    # Get the body from the active design linked to this CAM product
-    # The CAM product has a reference to the design
-    setup_input = cam.setups.createInput(adsk.cam.OperationTypes.MillingOperation)
-    setup_input.name = "Op1_Top_Side"
+    if existing:
+        print(f"Reusing existing setup: {existing.name}")
+        setup = existing
+    else:
+        setups = cam.setups
+        setup_in = setups.createInput(adsk.cam.OperationTypes.MillingOperation)
 
-    # Stock: use bounding box + 2 mm offset on sides, 1 mm on top
-    stock_input = setup_input.stockInput
-    stock_input.stockSelectionType = adsk.cam.StockSelectionTypes.RelativeBoxStockType
-    stock_offsets = adsk.cam.BoxStockOffsets.create(
-        adsk.core.ValueInput.createByString("0.1 mm"),  # +X
-        adsk.core.ValueInput.createByString("0.1 mm"),  # -X
-        adsk.core.ValueInput.createByString("0.1 mm"),  # +Y
-        adsk.core.ValueInput.createByString("0.1 mm"),  # -Y
-        adsk.core.ValueInput.createByString("1 mm"),    # +Z (top stock)
-        adsk.core.ValueInput.createByString("0 mm"),    # -Z (bottom fixed)
-    )
-    stock_input.setRelativeBoxStock(stock_offsets)
+        # Find the Bracket body off the CAM-linked design root occurrence.
+        bracket = None
+        for b in cam.designRootOccurrence.bRepBodies:
+            if b.name == 'Bracket':
+                bracket = b
+                break
+        if not bracket:
+            print("ERROR: Could not find a body named 'Bracket' under the design root.")
+            print("Run the DESIGN scripts first to build the Bracket part.")
+            return
 
-    setup = cam.setups.add(setup_input)
-    print(f"Setup created: {setup.name}")
-    print(f"Operation type: Milling")
-    print(f"Stock: bounding box + 1 mm top, 0.1 mm sides")
-    print(f"\nNow use CAM-04 through CAM-09 to add operations.")
+        setup_in.models = [bracket]
+        setup = setups.add(setup_in)
+        setup.name = 'BracketMillingSetup'
+        print(f"Setup created: {setup.name}")
+
+    # TODO: position the WCS at the top-left corner vertex of the stock.
+    # The Fusion 2703.x API surface for WCS-via-vertex is non-obvious — using
+    # the default WCS origin for now; CAM-04+ operations work either way.
+
+    print(f"Operation type   : {setup.operationType}")
+    print(f"Operations count : {setup.operations.count}")
 
 
 # =============================================================================
 # CAM-04  Add a Facing operation (flatten stock top)
-#         First op in any milling sequence per CNC Fundamentals lesson 7.
+#         Picks a face/flat mill ≥10 mm dia from the Fusion sample library.
 # =============================================================================
 
 import adsk.core, adsk.cam
@@ -138,35 +192,71 @@ def run(_context: str):
     app = adsk.core.Application.get()
     cam = adsk.cam.CAM.cast(app.activeProduct)
     if not cam:
-        print("Switch to Manufacture workspace first.")
+        print("Switch to Manufacture workspace first (run CAM-01).")
         return
 
-    if cam.setups.count == 0:
-        print("No setups found — run CAM-03 first.")
+    # ---- Find or create a milling setup -----------------------------------------
+    setup = None
+    if cam.setups.count > 0:
+        setup = cam.setups.item(0)
+        print(f"Using existing setup: {setup.name}")
+    else:
+        bracket = None
+        for b in cam.designRootOccurrence.bRepBodies:
+            if b.name == 'Bracket':
+                bracket = b
+                break
+        if not bracket:
+            print("ERROR: No 'Bracket' body found — run the DESIGN scripts first.")
+            return
+        setup_in = cam.setups.createInput(adsk.cam.OperationTypes.MillingOperation)
+        setup_in.models = [bracket]
+        setup = cam.setups.add(setup_in)
+        setup.name = 'BracketMillingSetup'
+        print(f"Setup created: {setup.name}")
+
+    # ---- Load Milling Tools (Metric) sample library -----------------------------
+    tl = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    lib_url = adsk.core.URL.create('systemlibraryroot://Samples/Milling Tools (Metric)')
+    mill_lib = tl.toolLibraryAtURL(lib_url)
+    if not mill_lib:
+        print("ERROR: Could not load 'Milling Tools (Metric)' sample library.")
         return
+    print(f"Sample mill library tools: {mill_lib.count}")
 
-    setup = cam.setups.item(0)
-
-    op_input = setup.operations.createInput("face")
-    op_input.displayName = "1_Facing"
-
-    # Tool: first flat endmill or face mill in library
-    for i in range(cam.documentToolLibrary.count):
-        t = cam.documentToolLibrary.item(i)
-        if t.typeName in ("flat end mill", "face mill"):
-            op_input.tool = t
-            print(f"Tool selected: {t.description}  Ø{t.parameters.itemByName('tool_diameter').value*10:.1f} mm")
+    # ---- Pick first face / flat mill with diameter >= 10 mm ---------------------
+    chosen_tool = None
+    for i in range(mill_lib.count):
+        t = mill_lib.item(i)
+        is_mill_param = t.parameters.itemByName('tool_isMill')
+        if not is_mill_param or not is_mill_param.value:
+            continue
+        dia_param = t.parameters.itemByName('tool_diameter')
+        if not dia_param:
+            continue
+        dia_mm = dia_param.value * 10
+        if dia_mm < 10:
+            continue
+        desc = (t.description or '').lower()
+        if 'face' in desc or 'flat' in desc:
+            chosen_tool = t
             break
 
-    # Facing parameters
-    params = op_input.parameters
-    params.itemByName("tolerance").value        = adsk.core.ValueInput.createByString("0.01 mm")
-    params.itemByName("stepover").value         = adsk.core.ValueInput.createByString("75%")
-    params.itemByName("stockToLeave").value     = adsk.core.ValueInput.createByString("0 mm")
-    params.itemByName("bottomHeight").value     = adsk.core.ValueInput.createByString("0 mm")  # machine to exact Z0
+    if not chosen_tool:
+        print("ERROR: No suitable face/flat mill (>=10 mm) found in sample library.")
+        return
 
+    dia_mm = chosen_tool.parameters.itemByName('tool_diameter').value * 10
+    print(f"Tool selected: {chosen_tool.description}  Ø{dia_mm:.2f} mm")
+
+    # ---- Create the 2D Facing operation -----------------------------------------
+    op_input = setup.operations.createInput('face')
+    op_input.tool = chosen_tool
     op = setup.operations.add(op_input)
-    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+    print(f"Operation added  : {op.name}")
+    print(f"Tool description : {chosen_tool.description}")
+    print(f"Op parameter count: {op.parameters.count}")
 
 
 # =============================================================================
