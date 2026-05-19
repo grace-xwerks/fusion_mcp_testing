@@ -29,13 +29,33 @@ def run(_context: str):
     for s_idx in range(cam.setups.count):
         setup = cam.setups.item(s_idx)
         print(f"\nSetup [{s_idx}]: {setup.name}")
-        print(f"  Operations: {setup.allOperations.count}")
+        print(f"  Operation type : {setup.operationType}")
+        print(f"  Operations     : {setup.allOperations.count}")
 
         for o_idx in range(setup.allOperations.count):
             op = setup.allOperations.item(o_idx)
-            tool_info = ""
+
+            # Tool description via the parameter table (quirk #25 — no typeName)
             if op.tool:
-                dia = op.tool.parameters.itemByName('tool_diameter')
-                tool_info = f"Ø{dia.value*10:.1f}mm {op.tool.typeName}" if dia else op.tool.typeName
-            status = "✓" if op.hasToolpath and op.isValid else "✗"
-            print(f"  {status} [{o_idx}] {op.name:35s}  {op.strategy:20s}  {tool_info}")
+                desc_param = op.tool.parameters.itemByName('tool_description')
+                tool_desc  = desc_param.value.value if desc_param else (op.tool.description or '(tool)')
+            else:
+                tool_desc = "(no tool)"
+
+            valid = "ok " if op.hasToolpath else "no "
+            print(f"  [{valid}] [{o_idx}] {op.name:35s}  strategy={op.strategy}")
+            print(f"         tool      : {tool_desc}")
+
+            # Pull a couple of common operation parameters if present
+            for pname in ('tolerance', 'stockToLeave', 'stepover',
+                          'maximumStepdown', 'feedrate', 'spindleSpeed',
+                          'spindle_speed'):
+                p = op.parameters.itemByName(pname)
+                if p is None:
+                    continue
+                # Parameter.value is a ValueInput-ish wrapper — try to read it
+                # via .expression which is always a printable string.
+                expr = getattr(p, 'expression', None)
+                if expr is None:
+                    expr = str(getattr(p, 'value', ''))
+                print(f"         {pname:16s}: {expr}")

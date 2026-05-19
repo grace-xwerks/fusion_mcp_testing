@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-21: Thread Mill (M6x1.0 thread mill on the 4 M6 corner holes)",
+  "id": "c50ec6ab-0eb8-5625-b28d-0359b04f4e64"
+}

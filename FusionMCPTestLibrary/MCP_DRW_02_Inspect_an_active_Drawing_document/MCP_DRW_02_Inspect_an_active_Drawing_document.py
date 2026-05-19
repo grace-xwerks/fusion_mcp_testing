@@ -14,11 +14,11 @@ Output via print() — visible in the Text Commands panel (View → Text Command
 Do NOT use try/except — unhandled exceptions are the MCP error signal.
 """
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active. Open or create a drawing document first.")
@@ -30,20 +30,17 @@ def run(_context: str):
 
     for s_idx in range(drw.sheets.count):
         sheet = drw.sheets.item(s_idx)
-        print(f"\n  Sheet [{s_idx}]: {sheet.name}")
-        print(f"    Size   : {sheet.paperSize}")
+        print(f"\n  Sheet [{s_idx}]: {sheet.name}  size={sheet.paperSize}")
         print(f"    Views  : {sheet.drawingViews.count}")
 
         for v_idx in range(sheet.drawingViews.count):
             view = sheet.drawingViews.item(v_idx)
-            print(f"      View [{v_idx}]: {view.name:25s}  "
-                  f"type={view.drawingViewType}  "
-                  f"scale=1:{int(1/view.scale) if view.scale < 1 else int(view.scale)}")
+            scale = view.scale
+            scale_str = f"1:{int(1/scale)}" if 0 < scale < 1 else f"{int(scale)}:1"
+            print(f"      View [{v_idx}]: {view.name:25s}  type={view.drawingViewType}  scale={scale_str}")
 
-            # Dimensions within this view
             dims = view.drawingDimensions
             print(f"        Dimensions: {dims.count}")
             for d_idx in range(min(dims.count, 5)):
                 d = dims.item(d_idx)
-                print(f"          [{d_idx}] {d.drawingDimensionType}  "
-                      f"value={d.text.formattedText if hasattr(d.text, 'formattedText') else '?'}")
+                print(f"          [{d_idx}] {d.drawingDimensionType}  value={d.text.formattedText}")

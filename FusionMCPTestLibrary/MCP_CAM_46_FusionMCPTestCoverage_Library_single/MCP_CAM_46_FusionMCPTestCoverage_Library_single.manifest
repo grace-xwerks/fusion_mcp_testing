@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-46: FusionMCPTestCoverage Library \u2014 single-source tool inventory",
+  "id": "3ae864f1-cbb5-5691-a361-f1b1d01ff468"
+}

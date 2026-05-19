@@ -14,11 +14,11 @@ Output via print() — visible in the Text Commands panel (View → Text Command
 Do NOT use try/except — unhandled exceptions are the MCP error signal.
 """
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active.")
@@ -32,26 +32,16 @@ def run(_context: str):
         print("No referenced documents found. Drawing must reference a design.")
         return
 
-    # Create the parts list table input
-    tbl_input = sheet.drawingTableViews.createPartsListInput(refs.item(0))
-
-    # Position in lower-right corner of sheet.
-    # ANSI A sheet = ~27.9 cm wide × 21.6 cm tall; table goes ~bottom-right
+    tbl_input          = sheet.customTables.createInput(refs.item(0))
     tbl_input.position = adsk.core.Point3D.create(16.0, 2.0, 0)
-
-    parts_list = sheet.drawingTableViews.addPartsList(tbl_input)
+    parts_list         = sheet.customTables.add(tbl_input)
 
     print(f"Parts list created: {parts_list.name}")
-    print(f"  Rows    : {parts_list.rowCount}  (1 header + components)")
-    print(f"  Columns : {parts_list.columnCount}")
-    print(f"  Position: lower-right of sheet (standard placement)")
-    print()
-
-    # Print the table contents
+    print(f"  Rows    : {parts_list.rows.count}  (1 header + components)")
+    print(f"  Columns : {parts_list.columns.count}")
+    print(f"  Position: lower-right of sheet (standard placement)\n")
     print("  Contents:")
-    for row in range(parts_list.rowCount):
-        row_data = []
-        for col in range(parts_list.columnCount):
-            cell = parts_list.cell(row, col)
-            row_data.append(cell.text[:20] if cell.text else "")
-        print(f"    Row {row}: {' | '.join(row_data)}")
+    for r in range(parts_list.rows.count):
+        row = parts_list.rows.item(r)
+        cells = [row.cells.item(c).text[:20] for c in range(parts_list.columns.count)]
+        print(f"    Row {r}: {' | '.join(cells)}")

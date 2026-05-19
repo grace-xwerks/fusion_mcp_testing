@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-28: Pencil (cleanup pass that follows concave corners)",
+  "id": "536fa5be-c794-528a-ad12-23e7b6834d84"
+}

@@ -24,21 +24,56 @@ def run(_context: str):
         return
 
     setup    = cam.setups.item(0)
-    op_input = setup.operations.createInput("contour2d")   # chamfer uses 2D Contour in Fusion
+    # Fusion exposes a dedicated 'chamfer2d' strategy in current API
+    op_input = setup.operations.createInput("chamfer2d")
     op_input.displayName = "6_Chamfer_Top"
 
-    # Chamfer mill or center drill as cutter
-    for i in range(cam.documentToolLibrary.count):
-        t = cam.documentToolLibrary.item(i)
-        if t.typeName in ("chamfer mill", "dovetail mill", "center drill"):
-            op_input.tool = t
-            print(f"Chamfer tool: {t.description}")
+    # Load the Metric Milling Tools sample library (quirk #21, #24)
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    sample_url = adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'
+    )
+    sample_lib = tool_libs.toolLibraryAtURL(sample_url)
+
+    chamfer_tool = None
+    # ToolLibrary IS a Collection — iterate directly (quirk #22)
+    for i in range(sample_lib.count):
+        t = sample_lib.item(i)
+        is_mill_param = t.parameters.itemByName('tool_isMill')
+        is_mill = bool(is_mill_param.value.value) if is_mill_param else False
+        desc_p = t.parameters.itemByName('tool_description')
+        desc = (desc_p.value.value
+                if desc_p else
+                (t.description or ''))
+        if is_mill and 'chamfer' in desc.lower():
+            chamfer_tool = t
+            print(f"Chamfer tool: {desc}")
             break
 
+    if chamfer_tool is None:
+        print("No chamfer mill found in 'Milling Tools (Metric)'. Aborting.")
+        return
+
+    op_input.tool = chamfer_tool
+
     params = op_input.parameters
-    params.itemByName("chamfer").value          = adsk.core.ValueInput.createByReal(1)  # enable chamfer mode
-    params.itemByName("chamferWidth").value     = adsk.core.ValueInput.createByString("1 mm")
-    params.itemByName("tolerance").value        = adsk.core.ValueInput.createByString("0.01 mm")
+    # Chamfer width ≈ Bracket's 1 mm chamfer parameter
+    params.itemByName("chamferWidth").expression = "1 mm"
+    params.itemByName("tolerance").expression    = "0.01 mm"
 
     op = setup.operations.add(op_input)
+
+    # Geometry: top face's outer contour. Use createNewFaceContourSelection
+    # — picking the top face automatically gives its outer perimeter chain.
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    top_candidates = [f for f in bracket.faces if abs(f.centroid.z - 2.0) < 0.05]
+    top_face = max(top_candidates,
+                   key=lambda f: (f.boundingBox.maxPoint.x - f.boundingBox.minPoint.x)
+                               * (f.boundingBox.maxPoint.y - f.boundingBox.minPoint.y))
+    contours_pv = op.parameters.itemByName('contours').value
+    cs = contours_pv.getCurveSelections(); cs.clear()
+    sel = cs.createNewFaceContourSelection(); sel.inputGeometry = [top_face]
+    contours_pv.applyCurveSelections(cs)
+
     print(f"Operation added: {op.name}")
+    print(f"Geometry: top face contour (outer perimeter)")

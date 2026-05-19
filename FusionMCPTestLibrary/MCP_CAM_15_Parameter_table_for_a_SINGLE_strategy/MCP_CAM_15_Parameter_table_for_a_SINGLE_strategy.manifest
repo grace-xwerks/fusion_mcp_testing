@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-15: Parameter table for a SINGLE strategy",
+  "id": "fcc98d10-67cb-59f9-af1d-f4fe52a44f4a"
+}

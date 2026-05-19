@@ -18,14 +18,19 @@ import adsk.core, adsk.cam
 
 def run(_context: str):
     app  = adsk.core.Application.get()
-    prod = app.activeProduct
+    ui   = app.userInterface
 
+    # Switch to the Manufacture workspace if it isn't active.
+    if ui.activeWorkspace.id != 'CAMEnvironment':
+        ui.workspaces.itemById('CAMEnvironment').activate()
+
+    prod = app.activeProduct
+    print(f"Active workspace   : {ui.activeWorkspace.id}")
     print(f"Active product type: {prod.productType}")
 
     cam = adsk.cam.CAM.cast(prod)
     if not cam:
-        print("ERROR: Not in the Manufacture workspace.")
-        print("Switch to Manufacture in Fusion before running CAM scripts.")
+        print("ERROR: activeProduct is not a CAM product even after switching.")
         return
 
     print(f"CAM product cast OK")

@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-39: Stock Material Library inventory",
+  "id": "7c5bb3a4-80ce-5e84-b064-ab54f12ecd31"
+}

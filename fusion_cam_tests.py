@@ -833,3 +833,1848 @@ def run(_context: str):
                 if expr is None:
                     expr = str(getattr(p, 'value', ''))
                 print(f"         {pname:16s}: {expr}")
+
+
+# =============================================================================
+# CAM-13  Strategy + parameter inventory dump (planning input for expansion)
+#         Walks setup.operations.compatibleStrategies for every OperationType
+#         we can spin up (Milling, Turning, JetMilling, Additive*, Inspection)
+#         and prints every parameter slot each strategy exposes. The output is
+#         the authoritative map of what we can wrap as per-strategy test files.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam:
+        print("Switch to Manufacture workspace first (run CAM-01).")
+        return
+
+    # Map OperationTypes enum members → human label. We probe each one and
+    # only emit a section for the types the current document/install supports.
+    optypes = []
+    for label in (
+        'MillingOperation', 'TurningOperation',
+        'JetMillingOperation', 'AdditiveFFFAMOperation',
+        'AdditivePBFAMOperation', 'InspectionOperation',
+        'ProbingOperation', 'CuttingOperation',
+    ):
+        v = getattr(adsk.cam.OperationTypes, label, None)
+        if v is not None:
+            optypes.append((label, v))
+
+    print(f"=== Operation-type surface ({len(optypes)} enum members reachable)")
+    for label, _ in optypes:
+        print(f"  - {label}")
+
+    # We need at least one Setup we own to ask compatibleStrategies. Create a
+    # throwaway setup per op-type, harvest the strategy list, then delete it.
+    print("\n=== Strategy lists per OperationType")
+
+    # Pick any solid body to seed the throwaway setups.
+    seed_body = None
+    for b in cam.designRootOccurrence.bRepBodies:
+        seed_body = b
+        break
+    if seed_body is None:
+        print("No bRepBody under designRootOccurrence — open a design with at least one body.")
+        return
+
+    inventory = {}   # op_type_label -> [strategy_string, ...]
+
+    for label, val in optypes:
+        try:
+            si = cam.setups.createInput(val)
+            si.models = [seed_body]
+            tmp = cam.setups.add(si)
+        except Exception as e:
+            print(f"  {label:30s}  setup-create FAILED: {e}")
+            continue
+
+        try:
+            strategies = list(tmp.operations.compatibleStrategies)
+        except Exception as e:
+            strategies = []
+            print(f"  {label:30s}  compatibleStrategies FAILED: {e}")
+
+        # OperationStrategy objects expose .name / .title / .description and a
+        # set of is{Milling,Turning,Drilling,Cutting,2D,3D,Finishing,
+        # Additive,Support,Rotary}Strategy flags plus isGenerationAllowed.
+        strat_rows = []
+        for s in strategies:
+            name = getattr(s, 'name', '?')
+            title = getattr(s, 'title', '')
+            flags = []
+            for fname in ('isMillingStrategy','isTurningStrategy','isDrillingStrategy',
+                          'isCuttingStrategy','isRotaryStrategy','is2DStrategy',
+                          'is3DStrategy','isFinishingStrategy','isAdditiveStrategy',
+                          'isSupportStrategy'):
+                try:
+                    if getattr(s, fname):
+                        flags.append(fname.replace('is','').replace('Strategy',''))
+                except Exception:
+                    pass
+            allowed = getattr(s, 'isGenerationAllowed', None)
+            strat_rows.append((name, title, allowed, flags))
+
+        inventory[label] = strat_rows
+        print(f"\n  {label}  ({len(strat_rows)} strategies)")
+        for name, title, allowed, flags in strat_rows:
+            tag = ','.join(flags) if flags else '-'
+            print(f"    {name:30s}  allowed={allowed!s:5s}  flags={tag:60s}  title={title!r}")
+
+        # Clean up throwaway setup
+        try:
+            tmp.deleteMe()
+        except Exception:
+            pass
+
+    # NOTE: An earlier version of this script also enumerated `op.parameters`
+    # for every one of the ~122 strategies in a single run() — that hammered
+    # Fusion hard enough to crash it (report 941722456). The parameter dump
+    # now lives in CAM-15, which takes one strategy at a time.
+    print("\n(parameter dump moved to CAM-15 — strategy-at-a-time to avoid OOM)")
+
+
+# =============================================================================
+# CAM-15  Parameter table for a SINGLE strategy
+#         Companion to CAM-13. Pass the strategy name through the
+#         module-level STRATEGY constant below — the script creates one
+#         throwaway setup, one OperationInput for that strategy, dumps the
+#         parameter table, and cleans up. Safe to repeat for every strategy
+#         in the CAM-13 inventory without crashing Fusion.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+STRATEGY = "pocket2d"   # ← edit to the strategy name you want dumped
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam:
+        print("Switch to Manufacture workspace first (run CAM-01).")
+        return
+
+    # Resolve OperationStrategy to know which OperationType setup to use.
+    strat_obj = adsk.cam.OperationStrategy.createFromString(STRATEGY)
+    if not strat_obj:
+        print(f"Unknown strategy: {STRATEGY!r}")
+        return
+    if strat_obj.isTurningStrategy:
+        op_type = adsk.cam.OperationTypes.TurningOperation
+    else:
+        op_type = adsk.cam.OperationTypes.MillingOperation
+
+    seed_body = next((b for b in cam.designRootOccurrence.bRepBodies), None)
+    if seed_body is None:
+        print("No bRepBody — open a design with at least one body.")
+        return
+
+    si = cam.setups.createInput(op_type)
+    si.models = [seed_body]
+    setup = cam.setups.add(si)
+    try:
+        oi = setup.operations.createInput(STRATEGY)
+        params = oi.parameters
+        print(f"Strategy: {STRATEGY}")
+        print(f"  title       : {strat_obj.title}")
+        print(f"  description : {strat_obj.description}")
+        print(f"  isMilling/Turning/Drilling/Cutting/Rotary = "
+              f"{strat_obj.isMillingStrategy}/{strat_obj.isTurningStrategy}/"
+              f"{strat_obj.isDrillingStrategy}/{strat_obj.isCuttingStrategy}/"
+              f"{strat_obj.isRotaryStrategy}")
+        print(f"  is2D/3D/Finishing/Additive/Support       = "
+              f"{strat_obj.is2DStrategy}/{strat_obj.is3DStrategy}/"
+              f"{strat_obj.isFinishingStrategy}/"
+              f"{strat_obj.isAdditiveStrategy}/{strat_obj.isSupportStrategy}")
+        print(f"  parameter count: {params.count}")
+        for i in range(params.count):
+            p = params.item(i)
+            expr  = getattr(p, 'expression', '')
+            title = getattr(p, 'title', '')
+            v = getattr(p, 'value', None)
+            vt = type(v).__name__ if v is not None else ''
+            print(f"  - {p.name:32s}  title={title!r}  expr={expr!r}  valueType={vt}")
+    finally:
+        # Always clean up the throwaway setup, even on error.
+        setup.deleteMe()
+
+
+# =============================================================================
+# CAM-14  Manager / library / post inventory dump
+#         Dumps the non-Setup CAM API surface: CAMManager, libraryManager,
+#         tool libraries, post folders + post files, machine library, NC
+#         programs collection. Companion to CAM-13.
+# =============================================================================
+
+import adsk.core, adsk.cam
+import os
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam:
+        print("Switch to Manufacture workspace first (run CAM-01).")
+        return
+
+    mgr = adsk.cam.CAMManager.get()
+    print(f"CAMManager: {mgr}")
+
+    # ── libraryManager surface ────────────────────────────────────────────
+    lm = mgr.libraryManager
+    print(f"\nlibraryManager attrs (non-callable):")
+    for n in sorted(dir(lm)):
+        if n.startswith('_'):
+            continue
+        try:
+            attr = getattr(lm, n)
+        except Exception:
+            continue
+        if callable(attr):
+            continue
+        print(f"  {n} = {attr!r}")
+
+    # ── Walk every tool library URL and report tool counts ────────────────
+    tl = lm.toolLibraries
+    print("\nTool library locations and child assets:")
+    for label in ('CloudLibraryLocation', 'ExternalLibraryLocation',
+                  'Fusion360LibraryLocation', 'HubLibraryLocation',
+                  'LocalLibraryLocation', 'NetworkLibraryLocation',
+                  'OnlineSamplesLibraryLocation'):
+        loc = getattr(adsk.cam.LibraryLocations, label, None)
+        if loc is None:
+            continue
+        root = tl.urlByLocation(loc)
+        if not root:
+            print(f"  {label:32s}  (no root)")
+            continue
+        assets = tl.childAssetURLs(root)
+        print(f"  {label:32s}  assets={len(assets)}")
+        for i in range(len(assets)):
+            url = assets[i]
+            try:
+                lib = tl.toolLibraryAtURL(url)
+                cnt = lib.count if lib else 0
+            except Exception:
+                cnt = -1
+            print(f"      tools={cnt:4d}  {url.toString()}")
+
+    # ── Post library manager (if present) ─────────────────────────────────
+    plm = getattr(lm, 'postLibrary', None) or getattr(mgr, 'postLibrary', None)
+    print(f"\npostLibrary: {plm}")
+
+    # ── Post-processor folders + a sample of their .cps contents ──────────
+    print(f"\nGeneric post folder : {cam.genericPostFolder}")
+    print(f"Personal post folder: {cam.personalPostFolder}")
+    for folder in (cam.genericPostFolder, cam.personalPostFolder):
+        if not folder or not os.path.isdir(folder):
+            continue
+        cps = sorted(f for f in os.listdir(folder) if f.lower().endswith('.cps'))
+        print(f"\n  {folder}  .cps files: {len(cps)}")
+        for f in cps[:25]:
+            print(f"    {f}")
+        if len(cps) > 25:
+            print(f"    ... +{len(cps) - 25} more")
+
+    # ── Machine library (5-axis kinematics etc.) ──────────────────────────
+    ml = getattr(lm, 'machineLibrary', None)
+    print(f"\nmachineLibrary: {ml}")
+    if ml is not None:
+        for label in ('CloudLibraryLocation', 'Fusion360LibraryLocation',
+                      'LocalLibraryLocation', 'OnlineSamplesLibraryLocation'):
+            loc = getattr(adsk.cam.LibraryLocations, label, None)
+            if loc is None:
+                continue
+            try:
+                root = ml.urlByLocation(loc)
+            except Exception:
+                continue
+            if not root:
+                continue
+            try:
+                assets = ml.childAssetURLs(root)
+            except Exception:
+                assets = []
+            print(f"  {label:32s}  machine-assets={len(assets)}")
+            for i in range(min(len(assets), 10)):
+                print(f"      {assets[i].toString()}")
+
+    # ── NC programs (post-process targets) ────────────────────────────────
+    nc_progs = getattr(cam, 'ncPrograms', None)
+    print(f"\nncPrograms: {nc_progs}")
+    if nc_progs is not None:
+        print(f"  count = {nc_progs.count}")
+        for i in range(nc_progs.count):
+            p = nc_progs.item(i)
+            print(f"  [{i}] name={p.name!r}  output={getattr(p, 'outputFolder', '?')}")
+
+    # ── Manufacturing model / stock surface ───────────────────────────────
+    mm = getattr(cam, 'manufacturingModels', None)
+    print(f"\nmanufacturingModels: {mm}")
+    if mm is not None:
+        print(f"  count = {mm.count}")
+        for i in range(mm.count):
+            m = mm.item(i)
+            print(f"  [{i}] {m.name}")
+
+
+# =============================================================================
+# CAM-16  2D Bore (helical bore-finish of the 4 M6 holes)
+#         Picks a Ø3.5 mm flat end mill (smaller than the Ø6 hole) and assigns
+#         the four cylindrical M6 hole faces as circularFaces. Bore strategy
+#         uses circular interpolation to finish the bore wall.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("bore")
+    op_input.displayName = "7_Bore_M6_holes"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    # Want a flat end mill smaller than the Ø6 mm bore: 3-5 mm.
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        if not p.itemByName('tool_isMill').value.value:
+            continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 3.0 <= dia_mm <= 5.0:
+            chosen = t
+            break
+    if chosen is None:
+        print("No 3-5 mm flat end mill in 'Milling Tools (Metric)'.")
+        return
+
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}  D{chosen.parameters.itemByName('tool_diameter').value.value*10:.1f} mm")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression    = "0.01 mm"
+    params.itemByName("stockToLeave").expression = "0 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    m6_cyls = [f for f in bracket.faces
+               if isinstance(f.geometry, adsk.core.Cylinder)
+               and abs(f.geometry.radius - 0.3) < 0.05]
+    op.parameters.itemByName('circularFaces').value.value = m6_cyls
+    print(f"Operation added: {op.name}  strategy={op.strategy}  ({len(m6_cyls)} holes)")
+
+
+# =============================================================================
+# CAM-17  Circular (interpolation finish of the 4 M6 holes)
+#         Similar to Bore but uses circular-interp finishing with explicit
+#         maximumStepdown for axial passes. Useful for flat-bottom finish.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("circular")
+    op_input.displayName = "8_Circular_M6_holes"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        if not p.itemByName('tool_isMill').value.value:
+            continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 3.0 <= dia_mm <= 5.0:
+            chosen = t
+            break
+    if chosen is None:
+        print("No 3-5 mm flat end mill in 'Milling Tools (Metric)'.")
+        return
+
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}  D{chosen.parameters.itemByName('tool_diameter').value.value*10:.1f} mm")
+
+    params = op_input.parameters
+    params.itemByName("maximumStepdown").expression = "1 mm"
+    params.itemByName("stockToLeave").expression    = "0 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    m6_cyls = [f for f in bracket.faces
+               if isinstance(f.geometry, adsk.core.Cylinder)
+               and abs(f.geometry.radius - 0.3) < 0.05]
+    op.parameters.itemByName('circularFaces').value.value = m6_cyls
+    print(f"Operation added: {op.name}  strategy={op.strategy}  ({len(m6_cyls)} holes)")
+
+
+# =============================================================================
+# CAM-18  Slot — API-surface demo only
+#         The Bracket's 70×30 mm pocket is rectangular and closed (4 walls),
+#         not a slot-shaped feature, so the slot strategy creates the operation
+#         but cannot generate a toolpath. Slot strategy is designed for
+#         keyway- and channel-style geometry where the tool spans the slot
+#         width. To generate a real toolpath, this batch needs a Bracket
+#         variant with an open or narrow slot feature.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("slot")
+    op_input.displayName = "9_Slot_Pocket"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    # Slot strategy is designed for slot-mill tools (T-slot / keyseat geometry).
+    # Prefer a 'slot mill' from the library; fall back to a flat end mill.
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        tt = p.itemByName('tool_type')
+        if tt and tt.value.value == 'slot mill':
+            chosen = t
+            break
+    if chosen is None:
+        for i in range(library.count):
+            t = library.item(i)
+            p = t.parameters
+            tt = p.itemByName('tool_type')
+            if not tt or tt.value.value != 'flat end mill':
+                continue
+            dia_mm = p.itemByName('tool_diameter').value.value * 10
+            if 5.5 <= dia_mm <= 6.5:
+                chosen = t
+                break
+    if chosen is None:
+        print("No slot mill or ~6 mm flat end mill found.")
+        return
+
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}  D{chosen.parameters.itemByName('tool_diameter').value.value*10:.1f} mm")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("maximumStepdown").expression = "2 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    pocket_bottom = next(f for f in bracket.faces if abs(f.centroid.z - 1.2) < 0.05)
+    pockets_pv = op.parameters.itemByName('pockets').value
+    cs = pockets_pv.getCurveSelections(); cs.clear()
+    sel = cs.createNewPocketSelection(); sel.inputGeometry = [pocket_bottom]
+    pockets_pv.applyCurveSelections(cs)
+
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-19  Engrave (traces top-face outer contour as if it were a sketch line)
+#         Engrave is the V-bit logo/text strategy - it follows a 2D contour
+#         at a specified Z and is intentionally tool-radius compensated for a
+#         knife-edge cut. We borrow the top face's perimeter as the contour.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("engrave")
+    op_input.displayName = "10_Engrave_TopContour"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    # Prefer a chamfer mill (V-bit) for engraving.
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        if not p.itemByName('tool_isMill').value.value:
+            continue
+        desc = (t.description or '').lower()
+        if 'chamfer' in desc:
+            chosen = t
+            break
+    if chosen is None:
+        for i in range(library.count):
+            t = library.item(i)
+            p = t.parameters
+            if not p.itemByName('tool_isMill').value.value:
+                continue
+            dia_mm = p.itemByName('tool_diameter').value.value * 10
+            if 2.0 <= dia_mm <= 4.0:
+                chosen = t
+                break
+    if chosen is None:
+        print("No chamfer mill or 2-4 mm flat end mill found.")
+        return
+
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("maximumStepdown").expression = "0.5 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    top_candidates = [f for f in bracket.faces if abs(f.centroid.z - 2.0) < 0.05]
+    top_face = max(top_candidates,
+                   key=lambda f: (f.boundingBox.maxPoint.x - f.boundingBox.minPoint.x)
+                               * (f.boundingBox.maxPoint.y - f.boundingBox.minPoint.y))
+    contours_pv = op.parameters.itemByName('contours').value
+    cs = contours_pv.getCurveSelections(); cs.clear()
+    sel = cs.createNewFaceContourSelection(); sel.inputGeometry = [top_face]
+    contours_pv.applyCurveSelections(cs)
+
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-20  Trace (follows top-face perimeter edges at fixed Z)
+#         Trace is for following a specific 2D curve at a fixed depth -
+#         useful for hand-tweaked cleanup paths or edge-following deburr cuts.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("trace")
+    op_input.displayName = "11_Trace_TopPerimeter"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        if not p.itemByName('tool_isMill').value.value:
+            continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t
+            break
+    if chosen is None:
+        print("No ~6 mm flat end mill.")
+        return
+
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}  D{chosen.parameters.itemByName('tool_diameter').value.value*10:.1f} mm")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("stepover").expression        = "tool_diameter * 0.5"
+    params.itemByName("stockToLeave").expression    = "0 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    top_candidates = [f for f in bracket.faces if abs(f.centroid.z - 2.0) < 0.05]
+    top_face = max(top_candidates,
+                   key=lambda f: (f.boundingBox.maxPoint.x - f.boundingBox.minPoint.x)
+                               * (f.boundingBox.maxPoint.y - f.boundingBox.minPoint.y))
+    curves_pv = op.parameters.itemByName('curves').value
+    cs = curves_pv.getCurveSelections(); cs.clear()
+    sel = cs.createNewFaceContourSelection(); sel.inputGeometry = [top_face]
+    curves_pv.applyCurveSelections(cs)
+
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-21  Thread Mill (M6x1.0 thread mill on the 4 M6 corner holes)
+#         Thread strategy uses circularFaces + threadType + threadPitch to
+#         mill a thread profile into a pre-drilled hole. Picks a thread mill
+#         from the metric milling sample library if available.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("thread")
+    op_input.displayName = "12_Thread_M6"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    # The METRIC sample library only ships M8/M10/M12 thread mills (>=Ø6.35 mm)
+    # — none fits the Ø6 mm M6 hole. The INCH sample library however ships a
+    # Ø4.57 mm (1/4-20 TPI) thread mill, which fits. Fusion's thread strategy
+    # accepts threadPitch independently of the tool's native pitch, so the
+    # inch tool can cut a metric M6×1.0 thread.
+    inch_lib = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Inch)'))
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    m6_cyls = [f for f in bracket.faces
+               if isinstance(f.geometry, adsk.core.Cylinder)
+               and abs(f.geometry.radius - 0.3) < 0.05]
+    bore_dia_mm = 6.0  # M6 = Ø6 mm bore
+
+    chosen, chosen_dia = None, 1e9
+    for lib in (library, inch_lib):
+        if not lib: continue
+        for i in range(lib.count):
+            t = lib.item(i)
+            p = t.parameters
+            tt = p.itemByName('tool_type')
+            if not tt or tt.value.value != 'thread mill': continue
+            dia_mm = p.itemByName('tool_diameter').value.value * 10
+            if dia_mm < bore_dia_mm and dia_mm < chosen_dia:
+                chosen, chosen_dia = t, dia_mm
+    if chosen is None:
+        print(f"No thread mill < Ø{bore_dia_mm} mm in Metric or Inch sample libraries.")
+        return
+
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}  Ø{chosen_dia:.2f} mm")
+
+    params = op_input.parameters
+    params.itemByName("threadPitch").expression = "1 mm"
+    # 'threadType' default 'ISO Metric profile' is fine.
+
+    op = setup.operations.add(op_input)
+    op.parameters.itemByName('circularFaces').value.value = m6_cyls
+    print(f"Operation added: {op.name}  strategy={op.strategy}  ({len(m6_cyls)} holes)")
+
+
+# =============================================================================
+# CAM-22  3D Adaptive Clearing (HEM-style rough of the full Bracket model)
+#         Same chip-load math as the 2D adaptive (CAM-05) but runs against the
+#         3D model envelope instead of a 2D pocket selection. 6 mm flat end
+#         mill, 10% RDOC, ~8 mm ADOC stepdown.
+#
+#         Generation requires roughing volume: the existing BracketMillingSetup
+#         ships with a 1 mm side stock offset which is too tight. Verified
+#         live — with `job_stockOffsetSides` bumped to 10 mm the op generates a
+#         49 s cycle. Left at default the op is created but produces no path.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("adaptive")
+    op_input.displayName = "13_Adaptive3D_Rough"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'flat end mill':
+            continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t
+            break
+    if chosen is None:
+        print("No ~6 mm flat end mill.")
+        return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.1 mm"
+    params.itemByName("optimalLoad").expression     = "tool_diameter * 0.1"
+    params.itemByName("maximumStepdown").expression = "8 mm"
+    params.itemByName("stockToLeave").expression    = "0.3 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-23  Pocket Clearing (3D pocket rough — non-adaptive alternative)
+#         Stepdown-based 3D pocket rough that follows Z levels rather than
+#         maintaining constant engagement. Slower than adaptive on tool life
+#         but simpler motion — useful on small machines.
+#
+#         Generation needs a `machiningBoundarySel` (2D containment boundary)
+#         to find pocket regions; bumping stock offset alone is not enough
+#         (verified — even with 10 mm side stock the op does not generate).
+#         The script creates the op to demonstrate the API; supplying a
+#         boundary selection is left as a future enhancement.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("pocket_clearing")
+    op_input.displayName = "14_PocketClearing3D_Rough"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'flat end mill':
+            continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t
+            break
+    if chosen is None:
+        print("No ~6 mm flat end mill.")
+        return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.1 mm"
+    params.itemByName("maximumStepdown").expression = "2 mm"
+    params.itemByName("stockToLeave").expression    = "0.3 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-24  Horizontal (finishes the flat horizontal faces of the Bracket)
+#         Detects flat horizontal regions (top + pocket bottom) and finishes
+#         each at its own Z. Uses a flat end mill since the targets are flat.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("horizontal")
+    op_input.displayName = "15_Horizontal_Finish"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'flat end mill':
+            continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t
+            break
+    if chosen is None:
+        print("No ~6 mm flat end mill.")
+        return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("maximumStepdown").expression = "1 mm"
+    params.itemByName("stockToLeave").expression    = "0 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-25  Parallel (3D parallel finishing — same-direction sweeping passes)
+#         Workhorse 3D finish for shallow surfaces. Ball end mill traces
+#         parallel passes across the model at a configured stepover.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("parallel")
+    op_input.displayName = "16_Parallel3D_Finish"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'ball end mill':
+            continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t
+            break
+    if chosen is None:
+        print("No ~6 mm ball end mill.")
+        return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression    = "0.01 mm"
+    params.itemByName("stockToLeave").expression = "0 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-26  Contour 3D (constant-Z finish — wedding-cake terrace pattern)
+#         Generates closed contour loops at constant Z heights. Best on
+#         steep walls; on the Bracket the pocket walls + outer profile are
+#         the natural targets.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("contour3d")
+    op_input.displayName = "17_Contour3D_Finish"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'ball end mill':
+            continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t
+            break
+    if chosen is None:
+        print("No ~6 mm ball end mill.")
+        return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("maximumStepdown").expression = "1 mm"
+    params.itemByName("stockToLeave").expression    = "0 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-27  Scallop (constant-scallop-height finish — uniform surface finish)
+#         Adapts stepover so the scallop height is constant regardless of
+#         surface angle. Best general-purpose ball-mill finish.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("scallop")
+    op_input.displayName = "18_Scallop_Finish"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'ball end mill':
+            continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t
+            break
+    if chosen is None:
+        print("No ~6 mm ball end mill.")
+        return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression    = "0.01 mm"
+    params.itemByName("stockToLeave").expression = "0 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-28  Pencil (cleanup pass that follows concave corners)
+#         Pencil only generates motion where the model has concave corners
+#         tighter than the tool radius — perfect for rest machining after
+#         a larger finishing pass.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("pencil")
+    op_input.displayName = "19_Pencil_Cleanup"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+    tutorial_metric = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Tutorial Tools (Metric)'))
+
+    # Pencil needs a ball mill smaller than typical concave radius.
+    # Bracket pocket has 2 mm corner radius — use a Ø2 mm ball if available
+    # (Tutorial Tools (Metric) has one). Fall back to Ø6 mm ball.
+    def find_ball(lib, lo, hi):
+        if not lib: return None
+        for i in range(lib.count):
+            t = lib.item(i); p = t.parameters
+            tt = p.itemByName('tool_type')
+            if not tt or tt.value.value != 'ball end mill': continue
+            d = p.itemByName('tool_diameter').value.value * 10
+            if lo <= d <= hi: return t
+        return None
+    chosen = (find_ball(tutorial_metric, 1.5, 3.0)
+              or find_ball(library, 1.5, 3.0)
+              or find_ball(library, 5.5, 6.5))
+    if chosen is None:
+        print("No ball end mill found in metric libraries.")
+        return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression    = "0.01 mm"
+    params.itemByName("stockToLeave").expression = "0 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-29  Radial (radial finishing pattern from a center point)
+#         Generates radial spokes from a center point outward. Best for
+#         round/circular features; on a rectangular Bracket the pattern is
+#         academic but demonstrates the API.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("radial")
+    op_input.displayName = "20_Radial_Finish"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'ball end mill':
+            continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t
+            break
+    if chosen is None:
+        print("No ~6 mm ball end mill.")
+        return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("maximumStepdown").expression = "1 mm"
+    params.itemByName("stockToLeave").expression    = "0 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-30  Spiral (spiral finishing from a center point outward)
+#         Spiral path from a center point in expanding arcs. Cleaner motion
+#         than radial — no abrupt direction reversals.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("spiral")
+    op_input.displayName = "21_Spiral_Finish"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'ball end mill':
+            continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t
+            break
+    if chosen is None:
+        print("No ~6 mm ball end mill.")
+        return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("maximumStepdown").expression = "1 mm"
+    params.itemByName("stockToLeave").expression    = "0 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-31  Morphed Spiral (spiral that morphs to match boundary shape)
+#         Spiral pattern that warps to follow a non-circular boundary -
+#         produces a continuous spiral cut even on rectangular pockets.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("morphed_spiral")
+    op_input.displayName = "22_MorphedSpiral_Finish"
+
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tool_libs.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'ball end mill':
+            continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t
+            break
+    if chosen is None:
+        print("No ~6 mm ball end mill.")
+        return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("maximumStepdown").expression = "1 mm"
+    params.itemByName("stockToLeave").expression    = "0 mm"
+
+    op = setup.operations.add(op_input)
+
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-32  Flat (finishes the flat-bottomed planar regions)
+#         Similar to Horizontal but Flat is keyed to "flat areas" detection,
+#         emitting one closed-pocket cut per flat region. Uses a flat end mill.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("flat")
+    op_input.displayName = "23_Flat_Finish"
+
+    tl = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tl.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i); p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'flat end mill': continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t; break
+    if chosen is None:
+        print("No ~6 mm flat end mill."); return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("maximumStepdown").expression = "1 mm"
+    params.itemByName("stockToLeave").expression    = "0 mm"
+
+    op = setup.operations.add(op_input)
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-33  Ramp (3D ramping pass — Z-level cuts with smooth descent)
+#         Cuts at constant-Z passes connected by ramps for smooth transitions.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("ramp")
+    op_input.displayName = "24_Ramp_Finish"
+
+    tl = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tl.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i); p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'ball end mill': continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t; break
+    if chosen is None:
+        print("No ~6 mm ball end mill."); return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("maximumStepdown").expression = "1 mm"
+    params.itemByName("stockToLeave").expression    = "0 mm"
+
+    op = setup.operations.add(op_input)
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-34  Blend (smooth blend between two surfaces — 5-axis common pattern)
+#         Generates a blended pass between two boundary surfaces. On the
+#         Bracket the available faces are mostly flat, so this exercises the
+#         API surface but may not produce an interesting path.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("blend")
+    op_input.displayName = "25_Blend_Finish"
+
+    tl = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tl.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i); p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'ball end mill': continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t; break
+    if chosen is None:
+        print("No ~6 mm ball end mill."); return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression    = "0.01 mm"
+    params.itemByName("stockToLeave").expression = "0 mm"
+
+    op = setup.operations.add(op_input)
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-35  Corner (rest-machining of concave corners — radius < prior tool)
+#         Generates motion only in concave corners tighter than the previous
+#         tool's radius. Pairs with Scallop / Parallel as a cleanup pass.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("corner")
+    op_input.displayName = "26_Corner_Cleanup"
+
+    tl = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tl.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+    tutorial_metric = tl.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Tutorial Tools (Metric)'))
+
+    # Prefer a Ø2 mm ball (Tutorial Tools (Metric)) to fit pocket corner radii.
+    def find_ball(lib, lo, hi):
+        if not lib: return None
+        for i in range(lib.count):
+            t = lib.item(i); p = t.parameters
+            tt = p.itemByName('tool_type')
+            if not tt or tt.value.value != 'ball end mill': continue
+            d = p.itemByName('tool_diameter').value.value * 10
+            if lo <= d <= hi: return t
+        return None
+    chosen = (find_ball(tutorial_metric, 1.5, 3.0)
+              or find_ball(library, 1.5, 3.0)
+              or find_ball(library, 5.5, 6.5))
+    if chosen is None:
+        print("No ball end mill."); return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression    = "0.01 mm"
+    params.itemByName("stockToLeave").expression = "0 mm"
+    # Corner is a rest-machining strategy: it needs to know what previous tool
+    # left material in the concave corners. Default source is 'tool' with the
+    # current tool's geometry as reference — that yields nothing to clean up.
+    # Switch to setup-stock as the reference so the strategy treats the full
+    # raw stock as un-machined material, then cleans up corners the Ø2 mm ball
+    # can reach.
+    params.itemByName("restMaterialFromJob").expression = "true"
+
+    op = setup.operations.add(op_input)
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-36  Steep and Shallow (combined finish for steep walls + shallow faces)
+#         Switches motion type by surface angle — scallop on shallow, contour3d
+#         on steep — to get a uniform finish in a single op.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("steep_and_shallow")
+    op_input.displayName = "27_SteepAndShallow_Finish"
+
+    tl = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tl.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i); p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'ball end mill': continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t; break
+    if chosen is None:
+        print("No ~6 mm ball end mill."); return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression    = "0.01 mm"
+    params.itemByName("stockToLeave").expression = "0 mm"
+
+    op = setup.operations.add(op_input)
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-37  Morph — API-surface demo (needs two guide curves)
+#         Morph strategy morphs between two boundary curves. On the Bracket
+#         the natural guide curves would be e.g. the top and bottom perimeter
+#         edges. Supplying the right pair is design-specific; this script
+#         demonstrates the API but does not assign `curves` — the op is
+#         created and document this as a "needs guide curves" sample.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("morph")
+    op_input.displayName = "28_Morph_Finish"
+
+    tl = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tl.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i); p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'ball end mill': continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t; break
+    if chosen is None:
+        print("No ~6 mm ball end mill."); return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression    = "0.01 mm"
+    params.itemByName("stockToLeave").expression = "0 mm"
+
+    op = setup.operations.add(op_input)
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+    print("(morph needs two guide curves in `curves` to generate; "
+          "left unset to keep this a generic demo)")
+
+
+# =============================================================================
+# CAM-38  Project — API-surface demo (needs source curves to project)
+#         Project strategy projects 2D source curves onto the model surface.
+#         Without source curves the op produces no toolpath. The script
+#         creates the op to demonstrate the API; populating `curves` with a
+#         meaningful sketch projection is left to a future Bracket variant.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first.")
+        return
+    setup = cam.setups.item(0)
+    op_input = setup.operations.createInput("project")
+    op_input.displayName = "29_Project_Finish"
+
+    tl = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    library = tl.toolLibraryAtURL(adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'))
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i); p = t.parameters
+        tt = p.itemByName('tool_type')
+        if not tt or tt.value.value != 'ball end mill': continue
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t; break
+    if chosen is None:
+        print("No ~6 mm ball end mill."); return
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}")
+
+    params = op_input.parameters
+    params.itemByName("tolerance").expression    = "0.01 mm"
+    params.itemByName("stockToLeave").expression = "0 mm"
+
+    op = setup.operations.add(op_input)
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    op.parameters.itemByName('model').value.value = [bracket]
+    print(f"Operation added: {op.name}  strategy={op.strategy}")
+    print("(project needs `curves` populated with sketch curves to project; "
+          "left unset to keep this a generic demo)")
+
+
+# =============================================================================
+# CAM-39  Stock Material Library inventory
+#         Walks adsk.cam.CAMManager.libraryManager.stockMaterialLibrary and
+#         dumps every location + child asset. Stock materials power feed/speed
+#         lookups and machining-power estimates per material.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    sml = adsk.cam.CAMManager.get().libraryManager.stockMaterialLibrary
+    print(f"stockMaterialLibrary: {sml}")
+    for label in ('CloudLibraryLocation', 'Fusion360LibraryLocation',
+                  'LocalLibraryLocation', 'HubLibraryLocation',
+                  'OnlineSamplesLibraryLocation', 'ExternalLibraryLocation',
+                  'NetworkLibraryLocation'):
+        loc = getattr(adsk.cam.LibraryLocations, label, None)
+        if loc is None: continue
+        try:
+            root = sml.urlByLocation(loc)
+        except Exception as e:
+            print(f"  {label:32s}  urlByLocation FAILED: {e}")
+            continue
+        if not root:
+            print(f"  {label:32s}  (no root)")
+            continue
+        try:
+            assets = sml.childAssetURLs(root)
+        except Exception as e:
+            print(f"  {label:32s}  childAssetURLs FAILED: {e}")
+            continue
+        print(f"  {label:32s}  assets={len(assets)}")
+        for i in range(min(len(assets), 20)):
+            print(f"      {assets[i].toString()}")
+        if len(assets) > 20:
+            print(f"      ... +{len(assets) - 20} more")
+
+
+# =============================================================================
+# CAM-40  CAM Template Library inventory
+#         CAM templates are saved Setup configurations (machine + WCS + stock
+#         conventions). They drive the "Apply Template" UI in the CAM browser.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    tl = adsk.cam.CAMManager.get().libraryManager.templateLibrary
+    print(f"templateLibrary: {tl}")
+    for label in ('CloudLibraryLocation', 'Fusion360LibraryLocation',
+                  'LocalLibraryLocation', 'HubLibraryLocation',
+                  'OnlineSamplesLibraryLocation'):
+        loc = getattr(adsk.cam.LibraryLocations, label, None)
+        if loc is None: continue
+        try:
+            root = tl.urlByLocation(loc)
+        except Exception as e:
+            print(f"  {label:32s}  urlByLocation FAILED: {e}")
+            continue
+        if not root:
+            print(f"  {label:32s}  (no root)")
+            continue
+        try:
+            assets = tl.childAssetURLs(root)
+        except Exception as e:
+            print(f"  {label:32s}  childAssetURLs FAILED: {e}")
+            continue
+        print(f"  {label:32s}  assets={len(assets)}")
+        for i in range(min(len(assets), 20)):
+            print(f"      {assets[i].toString()}")
+        if len(assets) > 20:
+            print(f"      ... +{len(assets) - 20} more")
+
+
+# =============================================================================
+# CAM-41  Print Setting Library inventory (additive)
+#         Print settings power the FFF/PBF additive workflows. Stored as
+#         per-material profiles in the print-setting library.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    psl = adsk.cam.CAMManager.get().libraryManager.printSettingLibrary
+    print(f"printSettingLibrary: {psl}")
+    for label in ('CloudLibraryLocation', 'Fusion360LibraryLocation',
+                  'LocalLibraryLocation', 'HubLibraryLocation',
+                  'OnlineSamplesLibraryLocation'):
+        loc = getattr(adsk.cam.LibraryLocations, label, None)
+        if loc is None: continue
+        try:
+            root = psl.urlByLocation(loc)
+        except Exception as e:
+            print(f"  {label:32s}  urlByLocation FAILED: {e}")
+            continue
+        if not root:
+            print(f"  {label:32s}  (no root)")
+            continue
+        try:
+            assets = psl.childAssetURLs(root)
+        except Exception as e:
+            print(f"  {label:32s}  childAssetURLs FAILED: {e}")
+            continue
+        print(f"  {label:32s}  assets={len(assets)}")
+        for i in range(min(len(assets), 20)):
+            print(f"      {assets[i].toString()}")
+        if len(assets) > 20:
+            print(f"      ... +{len(assets) - 20} more")
+
+
+# =============================================================================
+# CAM-42  Machine Library inventory
+#         Machine definitions drive multi-axis kinematics, post selection,
+#         simulation. CAM-14 already touches this; CAM-42 is the focused
+#         per-location dump showing categories of machines available.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    ml = adsk.cam.CAMManager.get().libraryManager.machineLibrary
+    print(f"machineLibrary: {ml}")
+    for label in ('CloudLibraryLocation', 'Fusion360LibraryLocation',
+                  'LocalLibraryLocation', 'HubLibraryLocation',
+                  'OnlineSamplesLibraryLocation'):
+        loc = getattr(adsk.cam.LibraryLocations, label, None)
+        if loc is None: continue
+        try:
+            root = ml.urlByLocation(loc)
+        except Exception as e:
+            print(f"  {label:32s}  urlByLocation FAILED: {e}")
+            continue
+        if not root:
+            print(f"  {label:32s}  (no root)")
+            continue
+        try:
+            assets = ml.childAssetURLs(root)
+        except Exception as e:
+            print(f"  {label:32s}  childAssetURLs FAILED: {e}")
+            continue
+        # Bucket the URLs by their first path segment (manufacturer / vendor).
+        buckets = {}
+        for i in range(len(assets)):
+            u = assets[i].toString()
+            # system://VENDOR/Model.mch → VENDOR
+            try:
+                vendor = u.split('://', 1)[1].split('/', 1)[0]
+            except Exception:
+                vendor = '(unknown)'
+            buckets[vendor] = buckets.get(vendor, 0) + 1
+        print(f"  {label:32s}  total assets={len(assets)}  vendors={len(buckets)}")
+        for vendor, n in sorted(buckets.items(), key=lambda kv: -kv[1])[:20]:
+            print(f"      {n:4d}  {vendor}")
+        if len(buckets) > 20:
+            print(f"      ... +{len(buckets) - 20} more vendors")
+
+
+# =============================================================================
+# CAM-43  Manufacturing Models (separate machining body)
+#         A ManufacturingModel is a CAM-side body that diverges from the
+#         design body (e.g. with fixturing tabs added). Demo creates one if
+#         the doc has none, otherwise reports the existing ones.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam:
+        print("Switch to Manufacture workspace first."); return
+
+    mms = cam.manufacturingModels
+    print(f"manufacturingModels.count = {mms.count}")
+    for i in range(mms.count):
+        m = mms.item(i)
+        print(f"  [{i}] {m.name}")
+
+    # Try to add a new one if API is available.
+    try:
+        ci = mms.createInput()
+        ci.name = "CAM_Mfg_Model_Demo"
+        # Source the design body as a baseline; ManufacturingModelInput typically
+        # takes the design body via .designModel or models list.
+        body = next((b for b in cam.designRootOccurrence.bRepBodies), None)
+        if body is not None:
+            for attr in ('models', 'designModel', 'body', 'sourceBody'):
+                if hasattr(ci, attr):
+                    try:
+                        if attr == 'models':
+                            setattr(ci, attr, [body])
+                        else:
+                            setattr(ci, attr, body)
+                    except Exception:
+                        pass
+        added = mms.add(ci)
+        print(f"  added: {added.name}")
+    except AttributeError as e:
+        print(f"  ManufacturingModels.createInput not exposed in this build: {e}")
+    except Exception as e:
+        print(f"  add failed: {e}")
+
+
+# =============================================================================
+# CAM-44  Two-Setup project (Roughing + Finishing split)
+#         Real shops separate roughing and finishing into distinct Setups so
+#         the operator can swap tools/stock between phases. Demo: add a
+#         second Setup named 'BracketFinishingSetup' alongside the existing
+#         BracketMillingSetup.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first."); return
+
+    name = 'BracketFinishingSetup'
+    existing = None
+    for i in range(cam.setups.count):
+        s = cam.setups.item(i)
+        if s.name == name:
+            existing = s; break
+    if existing:
+        print(f"Reusing: {existing.name}")
+    else:
+        bracket = next((b for b in cam.designRootOccurrence.bRepBodies
+                        if b.name == 'Bracket'), None)
+        if bracket is None:
+            print("Need a body named 'Bracket' under designRootOccurrence."); return
+        si = cam.setups.createInput(adsk.cam.OperationTypes.MillingOperation)
+        si.models = [bracket]
+        setup = cam.setups.add(si)
+        setup.name = name
+        print(f"Created: {setup.name}")
+
+    print(f"\nAll setups in this CAM product:")
+    for i in range(cam.setups.count):
+        s = cam.setups.item(i)
+        print(f"  [{i}] {s.name}  ops={s.allOperations.count}")
+
+
+# =============================================================================
+# CAM-45  NCPrograms.add (group post-processing into an NC program)
+#         An NCProgram bundles one or more Setups/Operations into a named
+#         post target. Demo: create an NC program covering the existing
+#         BracketMillingSetup.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first."); return
+
+    ncs = cam.ncPrograms
+    print(f"Existing NCPrograms: {ncs.count}")
+    for i in range(ncs.count):
+        n = ncs.item(i)
+        print(f"  [{i}] {n.name}")
+
+    try:
+        ci = ncs.createInput()
+        # NCProgramInput is the standard pattern. Set the post + program name,
+        # then point at the setup to bundle.
+        for attr_name, val in (('name', 'BracketNCProgram_Demo'),
+                               ('programName', '1002')):
+            if hasattr(ci, attr_name):
+                try: setattr(ci, attr_name, val)
+                except Exception: pass
+        # Operations / scope: prefer .operations = [setup] if exposed.
+        for attr_name in ('operations', 'parent', 'scope'):
+            if hasattr(ci, attr_name):
+                try:
+                    if attr_name == 'operations':
+                        setattr(ci, attr_name, [cam.setups.item(0)])
+                    else:
+                        setattr(ci, attr_name, cam.setups.item(0))
+                except Exception:
+                    pass
+        added = ncs.add(ci)
+        print(f"\nAdded NCProgram: {added.name}")
+    except AttributeError as e:
+        print(f"NCPrograms.createInput not exposed in this build: {e}")
+    except Exception as e:
+        print(f"add failed: {e}")
+
+
+# =============================================================================
+# CAM-46  FusionMCPTestCoverage Library — single-source tool inventory
+#         Loads toollibraryroot://Local/FusionMCPTestCoverage and prints its
+#         contents. This library is generated by tools/_build_coverage_lib.py
+#         and contains one tool per category the CAM tests exercise — so the
+#         whole suite can be run from a single library without chasing tools
+#         across the Cloud + sample libraries.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    tl = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    url = adsk.core.URL.create('toollibraryroot://Local/FusionMCPTestCoverage')
+    lib = tl.toolLibraryAtURL(url)
+    if not lib:
+        print("FusionMCPTestCoverage library not found.")
+        print("Build it first by running tools/_build_coverage_lib.py via the")
+        print("Fusion MCP, or copy the JSON from")
+        print("  %APPDATA%\Autodesk\CAM360\libraries\Local\FusionMCPTestCoverage.json")
+        return
+
+    print(f"FusionMCPTestCoverage tools: {lib.count}")
+    print()
+    for i in range(lib.count):
+        t = lib.item(i)
+        p = t.parameters
+        dia = p.itemByName('tool_diameter').value.value * 10
+        tt  = p.itemByName('tool_type').value.value
+        print(f"  D{dia:5.2f}mm  {tt:18s}  {t.description or t.productId}")

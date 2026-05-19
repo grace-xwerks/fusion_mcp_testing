@@ -14,11 +14,11 @@ Output via print() — visible in the Text Commands panel (View → Text Command
 Do NOT use try/except — unhandled exceptions are the MCP error signal.
 """
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active.")
@@ -30,75 +30,49 @@ def run(_context: str):
     print(f"╚══════════════════════════════════════════════════╝")
     print()
 
-    grand_total = {
-        "sheets":      drw.sheets.count,
-        "views":       0,
-        "sections":    0,
-        "dims":        0,
-        "notes":       0,
-        "balloons":    0,
-        "parts_lists": 0,
-    }
+    VT = adsk.drawing.DrawingViewTypes
+    grand_total = {"sheets": drw.sheets.count, "views": 0, "sections": 0,
+                   "dims": 0, "notes": 0, "balloons": 0, "parts_lists": 0}
 
     for s_idx in range(drw.sheets.count):
         sheet = drw.sheets.item(s_idx)
         print(f"  ── Sheet [{s_idx}]: {sheet.name} ({sheet.paperSize}) ──")
 
-        # Views breakdown
-        base_ct = section_ct = proj_ct = detail_ct = 0
+        # Views breakdown by type
+        counts = {VT.BaseDrawingViewType: 0, VT.SectionDrawingViewType: 0,
+                  VT.ProjectedDrawingViewType: 0, VT.DetailDrawingViewType: 0}
         for i in range(sheet.drawingViews.count):
             vt = sheet.drawingViews.item(i).drawingViewType
-            if vt == adsk.fusion.DrawingViewTypes.BaseDrawingViewType:
-                base_ct += 1
-            elif vt == adsk.fusion.DrawingViewTypes.SectionDrawingViewType:
-                section_ct += 1
-            elif vt == adsk.fusion.DrawingViewTypes.ProjectedDrawingViewType:
-                proj_ct += 1
-            elif vt == adsk.fusion.DrawingViewTypes.DetailDrawingViewType:
-                detail_ct += 1
-
+            if vt in counts: counts[vt] += 1
         total_views = sheet.drawingViews.count
         grand_total["views"]    += total_views
-        grand_total["sections"] += section_ct
+        grand_total["sections"] += counts[VT.SectionDrawingViewType]
 
         print(f"    Views      : {total_views} total  "
-              f"(base={base_ct}, projected={proj_ct}, "
-              f"section={section_ct}, detail={detail_ct})")
+              f"(base={counts[VT.BaseDrawingViewType]}, "
+              f"projected={counts[VT.ProjectedDrawingViewType]}, "
+              f"section={counts[VT.SectionDrawingViewType]}, "
+              f"detail={counts[VT.DetailDrawingViewType]})")
 
-        # Dimensions
-        dim_ct = sheet.drawingDimensions.count
-        grand_total["dims"] += dim_ct
-        print(f"    Dimensions : {dim_ct}")
+        grand_total["dims"]     += sheet.drawingDimensions.count
+        grand_total["notes"]    += sheet.drawingNotes.count
+        grand_total["balloons"] += sheet.drawingBalloons.count
+        print(f"    Dimensions : {sheet.drawingDimensions.count}")
+        print(f"    Notes      : {sheet.drawingNotes.count}")
+        print(f"    Balloons   : {sheet.drawingBalloons.count}")
 
-        # Notes / leaders
-        note_ct = sheet.drawingNotes.count
-        grand_total["notes"] += note_ct
-        print(f"    Notes      : {note_ct}")
-
-        # Balloons
-        balloon_ct = sheet.drawingBalloons.count
-        grand_total["balloons"] += balloon_ct
-        print(f"    Balloons   : {balloon_ct}")
-
-        # Parts lists / tables
-        pl_ct = 0
-        for t_idx in range(sheet.drawingTableViews.count):
-            t = sheet.drawingTableViews.item(t_idx)
-            if t.tableViewType == adsk.fusion.DrawingTableViewTypes.PartsListDrawingTableViewType:
-                pl_ct += 1
-                print(f"    Parts list : '{t.name}'  "
-                      f"{t.rowCount} rows × {t.columnCount} cols")
-        if pl_ct == 0:
+        if sheet.customTables.count == 0:
             print(f"    Parts list : ✗ MISSING — run DRW-17")
-        grand_total["parts_lists"] += pl_ct
+        else:
+            for t_idx in range(sheet.customTables.count):
+                t = sheet.customTables.item(t_idx)
+                print(f"    Parts list : '{t.name}'  {t.rows.count} rows × {t.columns.count} cols")
+        grand_total["parts_lists"] += sheet.customTables.count
 
-        # Section view labels present?
-        section_labels = []
-        for i in range(sheet.drawingViews.count):
-            v = sheet.drawingViews.item(i)
-            if (v.drawingViewType == adsk.fusion.DrawingViewTypes.SectionDrawingViewType
-                    and hasattr(v, "sectionLabel")):
-                section_labels.append(v.sectionLabel)
+        # Section view labels
+        section_labels = [sheet.drawingViews.item(i).sectionLabel
+                          for i in range(sheet.drawingViews.count)
+                          if sheet.drawingViews.item(i).drawingViewType == VT.SectionDrawingViewType]
         if section_labels:
             print(f"    Section IDs: {', '.join(section_labels)}")
 

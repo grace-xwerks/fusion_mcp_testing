@@ -27,21 +27,51 @@ def run(_context: str):
     op_input = setup.operations.createInput("pocket2d")
     op_input.displayName = "3_Pocket_Finish"
 
-    for i in range(cam.documentToolLibrary.count):
-        t = cam.documentToolLibrary.item(i)
-        dia = t.parameters.itemByName('tool_diameter').value * 10
-        if t.typeName == "flat end mill" and 6 <= dia <= 8:
-            op_input.tool = t
-            print(f"Tool: {t.description}  Ø{dia:.1f} mm")
+    # ── Load sample milling tool library (see quirks #21-#24) ──────────────
+    tool_libs  = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    target_url = adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'
+    )
+    library = tool_libs.toolLibraryAtURL(target_url)
+
+    # 6 mm flat end mill — fits the Bracket's 2 mm pocket corner radius.
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        if not p.itemByName('tool_isMill').value.value:
+            continue
+        # Drop taper filter — it's about shank shape, not tip. The
+        # 'flat' check in the description below is the right filter.
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 5.5 <= dia_mm <= 6.5:
+            chosen = t
             break
 
+    if chosen is None:
+        print("No ~6 mm flat end mill found in 'Milling Tools (Metric)'.")
+        return
+
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}  Ø{chosen.parameters.itemByName('tool_diameter').value.value*10:.1f} mm")
+
     params = op_input.parameters
-    params.itemByName("tolerance").value           = adsk.core.ValueInput.createByString("0.01 mm")
-    params.itemByName("stepover").value            = adsk.core.ValueInput.createByString("40%")
-    params.itemByName("maximumStepdown").value     = adsk.core.ValueInput.createByString("2 mm")
-    params.itemByName("stockToLeave").value        = adsk.core.ValueInput.createByString("0 mm")   # finish pass
-    params.itemByName("finishingPasses").value     = adsk.core.ValueInput.createByReal(1)
-    params.itemByName("finishStepover").value      = adsk.core.ValueInput.createByString("0.2 mm")
+    # Only set parameters that exist on pocket2d. 'stepover' is not present
+    # on this strategy in current Fusion 2703.x — issue #9 tracks a proper
+    # per-strategy parameter table.
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("maximumStepdown").expression = "2 mm"
+    params.itemByName("stockToLeave").expression    = "0 mm"
 
     op = setup.operations.add(op_input)
+
+    # Geometry: same pocket bottom face as CAM-05 Adaptive.
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    pocket_bottom = next(f for f in bracket.faces if abs(f.centroid.z - 1.2) < 0.05)
+    pockets_pv = op.parameters.itemByName('pockets').value
+    cs = pockets_pv.getCurveSelections(); cs.clear()
+    sel = cs.createNewPocketSelection(); sel.inputGeometry = [pocket_bottom]
+    pockets_pv.applyCurveSelections(cs)
+
     print(f"Operation added: {op.name}  strategy={op.strategy}")
+    print(f"Geometry: pocket bottom face")

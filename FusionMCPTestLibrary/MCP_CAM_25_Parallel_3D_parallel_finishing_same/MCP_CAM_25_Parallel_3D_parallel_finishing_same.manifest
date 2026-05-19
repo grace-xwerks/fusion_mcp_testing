@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-25: Parallel (3D parallel finishing \u2014 same-direction sweeping passes)",
+  "id": "094423f6-b639-5c66-af19-a4f98ecb3eb1"
+}

@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Design] DESIGN-24: Rigid joint between two peg sub-components",
+  "id": "1fc34f7d-e716-5524-8679-da6f05fb07b4"
+}

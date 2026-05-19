@@ -1,5 +1,5 @@
 # Fusion MCP Test Library
-Generated 2026-05-19 · 57 scripts
+Generated 2026-05-19 · 104 scripts
 
 ## How to use
 

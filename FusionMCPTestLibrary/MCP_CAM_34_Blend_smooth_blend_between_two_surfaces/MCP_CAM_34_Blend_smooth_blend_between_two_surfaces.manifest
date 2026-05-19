@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-34: Blend (smooth blend between two surfaces \u2014 5-axis common pattern)",
+  "id": "f088337c-89f3-51fc-8b35-87f6691740d8"
+}

@@ -14,41 +14,40 @@ Output via print() — visible in the Text Commands panel (View → Text Command
 Do NOT use try/except — unhandled exceptions are the MCP error signal.
 """
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
-    if not drw or drw.sheets.count == 0:
-        print("No drawing or sheet found.")
+    if not drw:
+        print("No drawing active.")
         return
 
-    sheet = drw.sheets.item(0)
-
-    if sheet.drawingViews.count == 0:
+    sheet     = drw.sheets.item(0)
+    views_col = sheet.drawingViews
+    if views_col.count == 0:
         print("No base view found. Run DRW-04 first.")
         return
-
-    base_view = sheet.drawingViews.item(0)
+    base_view = views_col.item(0)
 
     # Top view — above the base view
-    top_input          = sheet.drawingViews.createProjectedViewInput(base_view)
-    top_input.position = adsk.core.Point3D.create(7.0, 17.0, 0)  # above
-    top_view           = sheet.drawingViews.addProjectedView(top_input)
+    top_input          = views_col.createProjectedViewInput(base_view)
+    top_input.position = adsk.core.Point3D.create(7.0, 17.0, 0)
+    top_view = views_col.addProjectedView(top_input)
     print(f"Top view added: {top_view.name}")
 
-    # Right view — to the right of base view
-    right_input          = sheet.drawingViews.createProjectedViewInput(base_view)
-    right_input.position = adsk.core.Point3D.create(14.0, 10.0, 0)  # right
-    right_view           = sheet.drawingViews.addProjectedView(right_input)
+    # Right view — right of the base view
+    right_input          = views_col.createProjectedViewInput(base_view)
+    right_input.position = adsk.core.Point3D.create(14.0, 10.0, 0)
+    right_view = views_col.addProjectedView(right_input)
     print(f"Right view added: {right_view.name}")
 
     # Isometric view — upper right
-    iso_input                = sheet.drawingViews.createProjectedViewInput(base_view)
-    iso_input.position       = adsk.core.Point3D.create(20.0, 17.0, 0)
-    iso_input.viewOrientation = adsk.fusion.DrawingViewOrientations.HomeViewOrientation
-    iso_view                 = sheet.drawingViews.addProjectedView(iso_input)
+    iso_input                 = views_col.createProjectedViewInput(base_view)
+    iso_input.position        = adsk.core.Point3D.create(20.0, 17.0, 0)
+    iso_input.viewOrientation = adsk.drawing.DrawingViewOrientations.HomeViewOrientation
+    iso_view = views_col.addProjectedView(iso_input)
     print(f"Iso view added: {iso_view.name}")
 
-    print(f"\nTotal views on sheet: {sheet.drawingViews.count}")
+    print(f"\nTotal views on sheet: {views_col.count}")

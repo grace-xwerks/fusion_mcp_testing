@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Design] DESIGN-19: Project geometry from a body face onto an offset sketch",
+  "id": "71a5dd70-5c7a-54e5-b97c-bcd7af41d4fb"
+}

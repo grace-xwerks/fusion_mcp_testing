@@ -8,6 +8,6 @@
   "author": "Fusion MCP Test Library",
   "version": "1.0",
   "editEnabled": true,
-  "description": "[Drawings] DRW-03: Create a new drawing document from the active Design",
+  "description": "[Drawings] DRW-03: Create a new drawing document from the active Design  [BLOCKED on #28]",
   "id": "34e28d35-ff3c-5858-8771-6ba731e18644"
 }

@@ -20,33 +20,43 @@ def run(_context: str):
     app = adsk.core.Application.get()
     cam = adsk.cam.CAM.cast(app.activeProduct)
     if not cam:
-        print("Switch to Manufacture workspace first.")
+        print("Switch to Manufacture workspace first (run CAM-01).")
         return
 
-    des  = adsk.fusion.Design.cast(
-        app.documents.itemByName(cam.designRootName).products.item(0)
-    ) if False else None  # we'll use cam's linked design
+    # Idempotent: reuse an existing milling setup if one is already present.
+    existing = None
+    for i in range(cam.setups.count):
+        s = cam.setups.item(i)
+        if s.name == 'BracketMillingSetup':
+            existing = s
+            break
 
-    # Get the body from the active design linked to this CAM product
-    # The CAM product has a reference to the design
-    setup_input = cam.setups.createInput(adsk.cam.OperationTypes.MillingOperation)
-    setup_input.name = "Op1_Top_Side"
+    if existing:
+        print(f"Reusing existing setup: {existing.name}")
+        setup = existing
+    else:
+        setups = cam.setups
+        setup_in = setups.createInput(adsk.cam.OperationTypes.MillingOperation)
 
-    # Stock: use bounding box + 2 mm offset on sides, 1 mm on top
-    stock_input = setup_input.stockInput
-    stock_input.stockSelectionType = adsk.cam.StockSelectionTypes.RelativeBoxStockType
-    stock_offsets = adsk.cam.BoxStockOffsets.create(
-        adsk.core.ValueInput.createByString("0.1 mm"),  # +X
-        adsk.core.ValueInput.createByString("0.1 mm"),  # -X
-        adsk.core.ValueInput.createByString("0.1 mm"),  # +Y
-        adsk.core.ValueInput.createByString("0.1 mm"),  # -Y
-        adsk.core.ValueInput.createByString("1 mm"),    # +Z (top stock)
-        adsk.core.ValueInput.createByString("0 mm"),    # -Z (bottom fixed)
-    )
-    stock_input.setRelativeBoxStock(stock_offsets)
+        # Find the Bracket body off the CAM-linked design root occurrence.
+        bracket = None
+        for b in cam.designRootOccurrence.bRepBodies:
+            if b.name == 'Bracket':
+                bracket = b
+                break
+        if not bracket:
+            print("ERROR: Could not find a body named 'Bracket' under the design root.")
+            print("Run the DESIGN scripts first to build the Bracket part.")
+            return
 
-    setup = cam.setups.add(setup_input)
-    print(f"Setup created: {setup.name}")
-    print(f"Operation type: Milling")
-    print(f"Stock: bounding box + 1 mm top, 0.1 mm sides")
-    print(f"\nNow use CAM-04 through CAM-09 to add operations.")
+        setup_in.models = [bracket]
+        setup = setups.add(setup_in)
+        setup.name = 'BracketMillingSetup'
+        print(f"Setup created: {setup.name}")
+
+    # TODO: position the WCS at the top-left corner vertex of the stock.
+    # The Fusion 2703.x API surface for WCS-via-vertex is non-obvious — using
+    # the default WCS origin for now; CAM-04+ operations work either way.
+
+    print(f"Operation type   : {setup.operationType}")
+    print(f"Operations count : {setup.operations.count}")

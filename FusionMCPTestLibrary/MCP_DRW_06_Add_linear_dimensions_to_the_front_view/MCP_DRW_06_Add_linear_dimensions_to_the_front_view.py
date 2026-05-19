@@ -14,36 +14,33 @@ Output via print() — visible in the Text Commands panel (View → Text Command
 Do NOT use try/except — unhandled exceptions are the MCP error signal.
 """
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
-    if not drw or drw.sheets.count == 0:
-        print("No drawing found.")
+    if not drw:
+        print("No drawing active.")
         return
 
     sheet     = drw.sheets.item(0)
-    base_view = sheet.drawingViews.item(0)
-
-    print(f"Base view: {base_view.name}")
-    print(f"Visible edges in view: {base_view.curves.count}")
-
-    # Auto-detect the two leftmost and rightmost points to drive a width dim
-    # In practice you'd select specific edges by their 3D geometry match;
-    # here we demonstrate the API pattern with the bounding geometry.
-    curves = base_view.curves
+    views_col = sheet.drawingViews
+    if views_col.count == 0:
+        print("No views on sheet — run DRW-04 first.")
+        return
+    base_view = views_col.item(0)
+    curves    = base_view.curves
+    print(f"Base view: {base_view.name}  curves={curves.count}")
     if curves.count < 2:
-        print("Not enough curves in view to dimension. Ensure DRW-04 ran correctly.")
+        print("Not enough curves in view to dimension.")
         return
 
-    # Add a linear dimension between first two visible edges
     dim_input = sheet.drawingDimensions.createLinearDimensionInput(
-        curves.item(0),   # first edge
-        curves.item(1),   # second edge (Fusion picks nearest parallel pair)
-        adsk.core.Point3D.create(7.0, 7.5, 0),   # dimension line position
-        adsk.fusion.DrawingLinearDimensionOrientations.HorizontalLinearDimension
+        curves.item(0),
+        curves.item(1),
+        adsk.core.Point3D.create(7.0, 7.5, 0),
+        adsk.drawing.DrawingLinearDimensionOrientations.HorizontalLinearDimension,
     )
     dim = sheet.drawingDimensions.addLinearDimension(dim_input)
-    print(f"Linear dimension added: {dim.text.formattedText if hasattr(dim, 'text') else 'OK'}")
+    print(f"Linear dimension added: {dim.text.formattedText}")

@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-19: Engrave (traces top-face outer contour as if it were a sketch line)",
+  "id": "ba9ed366-5757-5f3c-a9c7-fea09e5ccbdf"
+}
