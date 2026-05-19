@@ -2791,3 +2791,121 @@ def run(_context: str):
 
     print(f"\nTotal operations on setup: {setup.operations.count}")
     print("If you see this line, quirk #9 may have softened — update memory.")
+
+
+# =============================================================================
+# CAM-49  Folder (organizational container for operations)
+#         `folder` creates a CAMFolder — a grouping container in the browser
+#         tree. Useful for organizing many ops in a single Setup (e.g.
+#         "Roughing", "Finishing", "Drilling" groups). Quirk: folders are
+#         CAMFolder, not CAMOperation, and do NOT increment
+#         setup.operations.count even though they're added via that collection.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first."); return
+
+    setup = cam.setups.item(0)
+    before = setup.operations.count
+    print(f"Setup '{setup.name}' operations.count before: {before}")
+
+    oi = setup.operations.createInput('folder')
+    folder = setup.operations.add(oi)
+    print(f"Added: {folder.name}  classType={folder.classType()}")
+    print(f"  operations.count after: {setup.operations.count}  "
+          f"(unchanged — folders aren't counted as operations)")
+
+
+# =============================================================================
+# CAM-50  Manual NC (operator instruction insertion)
+#         `manual` injects a Manual NC entry into the program — comment,
+#         dwell, tool break, M-code passthrough, etc. The post emits these
+#         verbatim into NC output. Demo: insert a Comment instruction.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first."); return
+
+    setup = cam.setups.item(0)
+    oi = setup.operations.createInput('manual')
+    # manualType is a ChoiceParameterValue. 22 choices: 'comment', 'stop',
+    # 'optional-stop', 'dwell', 'break-control', 'tool-measure', 'open-door',
+    # 'pass-through', 'force-tool-change', 'call-subprogram', etc.
+    # Default is already 'comment' — set explicitly for clarity.
+    oi.parameters.itemByName('manualType').expression = '"comment"'
+    oi.parameters.itemByName('comment').expression = '"Inserted by MCP_CAM_50"'
+
+    op = setup.operations.add(oi)
+    print(f"Added Manual NC op: {op.name}  strategy={op.strategy}")
+
+
+# =============================================================================
+# CAM-51  Hole Recognition (auto-detect holes for drilling)
+#         `hole_recognition` walks the model to find cylindrical hole features
+#         and stages them for downstream drill ops. Quirk: returns a
+#         CAMHoleRecognition object (not CAMOperation) — no `hasToolpath`
+#         attribute; it produces hole groups, not a toolpath itself.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first."); return
+
+    setup = cam.setups.item(0)
+    oi = setup.operations.createInput('hole_recognition')
+    op = setup.operations.add(oi)
+    print(f"Added: {op.name}  classType={op.classType()}")
+
+    # Highlight the parameters that drive hole detection (out of ~40 total).
+    keys = ('holeRecog_multiAxis', 'holeRecog_minimizeToolChanges',
+            'holeRecog_organizeOpsInFolders', 'holeRecog_toolLibraries',
+            'holeRecog_filterByDiameter', 'holeRecog_diameterForFilter',
+            'holeRecog_includePartialHoles',
+            'holeRecog_useFewestSpotDrillsPossible')
+    for k in keys:
+        p = op.parameters.itemByName(k)
+        v = p.value.value if p else '?'
+        print(f"  {k:42s} = {v}")
+
+
+# =============================================================================
+# CAM-52  Feature Construction (additive build-feature generator)
+#         `feature_construction` is an additive strategy that builds programmatic
+#         features (e.g. DED deposition) onto a base body. The strategy is
+#         flagged additive but allowed=True on this build and add() succeeds on
+#         a milling Setup; generation needs proper additive geometry/kinematics.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first."); return
+
+    setup = cam.setups.item(0)
+    strat = adsk.cam.OperationStrategy.createFromString('feature_construction')
+    print(f"strategy: {strat.name}  /  {strat.title}")
+    print(f"  flags: additive={strat.isAdditiveStrategy} support={strat.isSupportStrategy}"
+          f" milling={strat.isMillingStrategy} allowed={strat.isGenerationAllowed}")
+    print(f"  description: {strat.description}")
+
+    oi = setup.operations.createInput('feature_construction')
+    print(f"\n  createInput OK — params exposed: {oi.parameters.count}")
+    op = setup.operations.add(oi)
+    print(f"  add OK -> {op.name}  classType={op.classType()}")
