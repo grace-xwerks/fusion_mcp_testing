@@ -7,6 +7,22 @@ for the CAM-test expansion in [issue #11](https://github.com/grace-xwerks/fusion
 The raw dumps live in [`out_cam_13.txt`](../out_cam_13.txt) and
 [`out_cam_14.txt`](../out_cam_14.txt) at repo root.
 
+## Coverage status — 2026-05-19
+
+All 69 strategies in `OperationStrategy` now have at least an API-surface
+demo (CAM-01..79):
+
+- **Full operation tests** (createInput + add + generation): 49 — Bracket /
+  Rotor scripts CAM-04..36 + CAM-48..52.
+- **API-surface demos** (createFromString + createInput + try/except add):
+  20 — CAM-37 (morph), CAM-38 (project), CAM-53..59 (multi-axis),
+  CAM-60..62 (probing), CAM-63..79 (turning).
+
+Demos are safe to run on the existing milling file — they instantiate the
+strategy and dump parameter counts but tolerate the missing 5-axis machine /
+probe tool / turning setup that full generation requires. Promote any demo
+to a full test once the matching prereq lands in the file.
+
 ## OperationTypes enum — only 2 reachable
 
 ```text
@@ -85,17 +101,22 @@ useful when you want to inspect a strategy without spinning up a Setup.
 | `inclined_walls`   | Wall              | **no** |
 | `flow` / `flow2`   | Flow (Old) / Flow | `flow2` only |
 
-### Multi-axis (5+2) — uncovered (7)
+### Multi-axis (5+2) — Batch E API-surface demos (CAM-53..59)
 
-| name                  | title             |
-|-----------------------|-------------------|
-| `three_plus_two`      | 3+2 Clearing      |
-| `multiaxis_roughing`  | Multi-Axis Clearing |
-| `multiaxis_finishing` | Multi-Axis Finishing |
-| `multi_axis_contour`  | Multi-Axis Contour |
-| `multi_axis_morph`    | Multi-Axis Morph  |
-| `swarf`               | Swarf             |
-| `advanced_swarf`      | Advanced Swarf    |
+| name                  | title             | script |
+|-----------------------|-------------------|--------|
+| `three_plus_two`      | 3+2 Clearing      | CAM-53 |
+| `multiaxis_roughing`  | Multi-Axis Clearing | CAM-54 |
+| `multiaxis_finishing` | Multi-Axis Finishing | CAM-55 |
+| `multi_axis_contour`  | Multi-Axis Contour | CAM-56 |
+| `multi_axis_morph`    | Multi-Axis Morph  | CAM-57 |
+| `swarf`               | Swarf             | CAM-58 |
+| `advanced_swarf`      | Advanced Swarf    | CAM-59 |
+
+Demos exercise the API via `createFromString` + `createInput` + `add` in
+try/except. Live toolpath generation requires a 5-axis machine assignment +
+strategy-specific drive geometry. Promote to full operation tests once a
+5-axis-capable part (blade / impeller) is added.
 
 ### Rotary — uncovered (3)
 
@@ -112,13 +133,15 @@ useful when you want to inspect a strategy without spinning up a Setup.
 | `deburr`  | Deburr   |
 | `geodesic`| Geodesic |
 
-### Probing & inspection — uncovered (3)
+### Probing & inspection — Batch F API-surface demos (CAM-60..62)
 
-| name              | title           |
-|-------------------|-----------------|
-| `probe`           | Probe WCS       |
-| `probe_geometry`  | Probe Geometry  |
-| `inspect_surface` | Inspect Surface |
+| name              | title           | script |
+|-------------------|-----------------|--------|
+| `probe`           | Probe WCS       | CAM-60 |
+| `probe_geometry`  | Probe Geometry  | CAM-61 |
+| `inspect_surface` | Inspect Surface | CAM-62 |
+
+Live runs need a probe tool from the Fusion Samples / Probes library (6 assets).
 
 ### Construction / organizational — covered by CAM-49..52 (4)
 
@@ -131,27 +154,31 @@ useful when you want to inspect a strategy without spinning up a Setup.
 
 (CAM-47 = rotor rotary setup, CAM-48 = Batch D 5-strategy retest — both landed via PR #12.)
 
-### Turning (lathe) — uncovered (17)
+### Turning (lathe) — Batch G API-surface demos (CAM-63..79)
 
-| name                         | title                       |
-|------------------------------|-----------------------------|
-| `turning_face`               | Turning Face                |
-| `turning_profile`            | Turning Profile             |
-| `turning_profile_roughing`   | Turning Profile Roughing    |
-| `turning_profile_finishing`  | Turning Profile Finishing   |
-| `turning_adaptive_roughing`  | Turning Adaptive Roughing   |
-| `turning_chamfer`            | Turning Chamfer             |
-| `turning_part`               | Turning Part                |
-| `turning_single_groove`      | Turning Single Groove       |
-| `turning_groove_roughing`    | Turning Groove Roughing     |
-| `turning_groove_finishing`   | Turning Groove Finishing    |
-| `turning_profile_groove`     | Turning Groove (profile)    |
-| `turning_thread`             | Turning Thread              |
-| `turning_trace`              | Turning Trace               |
-| `turning_stock_transfer`     | Turning Stock Transfer      |
-| `subspindle_grab`            | Subspindle Grab             |
-| `subspindle_return`          | Subspindle Return           |
-| `bar_pull`                   | Bar Pull                    |
+| name                         | title                       | script |
+|------------------------------|-----------------------------|--------|
+| `turning_face`               | Turning Face                | CAM-63 |
+| `turning_profile`            | Turning Profile             | CAM-64 |
+| `turning_profile_roughing`   | Turning Profile Roughing    | CAM-65 |
+| `turning_profile_finishing`  | Turning Profile Finishing   | CAM-66 |
+| `turning_adaptive_roughing`  | Turning Adaptive Roughing   | CAM-67 |
+| `turning_chamfer`            | Turning Chamfer             | CAM-68 |
+| `turning_part`               | Turning Part                | CAM-69 |
+| `turning_single_groove`      | Turning Single Groove       | CAM-70 |
+| `turning_groove_roughing`    | Turning Groove Roughing     | CAM-71 |
+| `turning_groove_finishing`   | Turning Groove Finishing    | CAM-72 |
+| `turning_profile_groove`     | Turning Groove (profile)    | CAM-73 |
+| `turning_thread`             | Turning Thread              | CAM-74 |
+| `turning_trace`              | Turning Trace               | CAM-75 |
+| `turning_stock_transfer`     | Turning Stock Transfer      | CAM-76 |
+| `subspindle_grab`            | Subspindle Grab             | CAM-77 |
+| `subspindle_return`          | Subspindle Return           | CAM-78 |
+| `bar_pull`                   | Bar Pull                    | CAM-79 |
+
+All turning demos probe for a TurningOperation Setup; without one they print
+the metadata and stop. Adding a revolved-stock design + turning setup
+unblocks full operation tests (see Batch G in the expansion plan below).
 
 ## Non-Setup API surface (from CAM-14)
 
