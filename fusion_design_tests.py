@@ -873,3 +873,516 @@ def run(_context: str):
     # Expected Δvol: triangle area 0.5 × extrusion height 2 = 1.0 cm³
     print(f"After rib gusset (Δ expected +1.00): faces={Lbody.faces.count} "
           f"vol={Lbody.volume:.3f} cm³")
+
+
+# =============================================================================
+# DESIGN-16 — Offset construction plane from a body face
+#             Run AFTER DESIGN-03. Creates a plane 25 mm above the Bracket
+#             top face. Useful as a sketch host for subsequent operations.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+    body = root.bRepBodies.itemByName("Bracket")
+    if body is None:
+        print("Bracket not found. Run DESIGN-03 first.")
+        return
+
+    H = des.userParameters.itemByName("part_height").value
+    top_face = next(f for f in body.faces
+                    if abs(f.centroid.z - H) < 0.001 and
+                       (f.boundingBox.maxPoint.x - f.boundingBox.minPoint.x) > 8.0)
+
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(top_face, adsk.core.ValueInput.createByReal(2.5))   # 25 mm above
+    plane = root.constructionPlanes.add(cpi)
+    plane.name = "Plane_25mmAboveTop"
+
+    # Expected: plane origin at z = H + 2.5 = 4.5 cm
+    print(f"Plane '{plane.name}' origin z={plane.geometry.origin.z:.3f} cm "
+          f"(expect {H + 2.5:.3f})")
+
+
+# =============================================================================
+# DESIGN-17 — Construction axis perpendicular to a face at a sketch point
+#             Run AFTER DESIGN-03. Creates a Z-axis through (5, 3) at the top
+#             face center. Quirk: setByPerpendicularAtPoint(face, point) —
+#             face FIRST, point second.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+    body = root.bRepBodies.itemByName("Bracket")
+    if body is None:
+        print("Bracket not found. Run DESIGN-03 first.")
+        return
+
+    H = des.userParameters.itemByName("part_height").value
+    top_face = next(f for f in body.faces
+                    if abs(f.centroid.z - H) < 0.001 and
+                       (f.boundingBox.maxPoint.x - f.boundingBox.minPoint.x) > 8.0)
+
+    # Sketch point on a construction plane offset to H (avoids quirk #8b's
+    # face-bound silent issues with downstream usage).
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(H))
+    sketch_plane = root.constructionPlanes.add(cpi)
+    sketch_plane.name = "Plane_AxisPointSketch"
+    sk = root.sketches.add(sketch_plane)
+    sk.name = "Sketch_AxisPoint"
+    pt = sk.sketchPoints.add(adsk.core.Point3D.create(5.0, 3.0, 0))
+
+    ai = root.constructionAxes.createInput()
+    ai.setByPerpendicularAtPoint(top_face, pt)   # face FIRST, point SECOND
+    axis = root.constructionAxes.add(ai)
+    axis.name = "Axis_CenterOfTop"
+
+    d = axis.geometry.direction
+    print(f"Axis '{axis.name}' direction=({d.x:.3f}, {d.y:.3f}, {d.z:.3f}) "
+          f"(expect (0, 0, ±1))")
+
+
+# =============================================================================
+# DESIGN-18 — Construction point at intersection of three offset planes
+#             Run AFTER DESIGN-02. Creates a point at (5, 3, H) = the Bracket
+#             top-face center, without needing the Bracket body present.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    H = des.userParameters.itemByName("part_height").value
+
+    p1_in = root.constructionPlanes.createInput()
+    p1_in.setByOffset(root.yZConstructionPlane, adsk.core.ValueInput.createByReal(5.0))
+    plane_X5 = root.constructionPlanes.add(p1_in); plane_X5.name = "Plane_X5"
+    p2_in = root.constructionPlanes.createInput()
+    p2_in.setByOffset(root.xZConstructionPlane, adsk.core.ValueInput.createByReal(3.0))
+    plane_Y3 = root.constructionPlanes.add(p2_in); plane_Y3.name = "Plane_Y3"
+    p3_in = root.constructionPlanes.createInput()
+    p3_in.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(H))
+    plane_Ztop = root.constructionPlanes.add(p3_in); plane_Ztop.name = "Plane_Ztop"
+
+    pti = root.constructionPoints.createInput()
+    pti.setByThreePlanes(plane_X5, plane_Y3, plane_Ztop)
+    cpt = root.constructionPoints.add(pti)
+    cpt.name = "Pt_TopCenter"
+
+    p = cpt.geometry
+    print(f"Point '{cpt.name}' at ({p.x:.3f}, {p.y:.3f}, {p.z:.3f}) "
+          f"(expect (5.000, 3.000, {H:.3f}))")
+
+
+# =============================================================================
+# DESIGN-19 — Project geometry from a body face onto an offset sketch
+#             Run AFTER DESIGN-03. Projects the Bracket top face's edges
+#             (4 perimeter + 4 fillet arcs + 8 hole circles = 16 curves)
+#             onto a sketch on a plane 30 mm above the top face.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+    body = root.bRepBodies.itemByName("Bracket")
+    if body is None:
+        print("Bracket not found. Run DESIGN-03 first.")
+        return
+
+    H = des.userParameters.itemByName("part_height").value
+    top_face = next(f for f in body.faces
+                    if abs(f.centroid.z - H) < 0.001 and
+                       (f.boundingBox.maxPoint.x - f.boundingBox.minPoint.x) > 8.0)
+
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(H + 3.0))
+    plane = root.constructionPlanes.add(cpi)
+    plane.name = "Plane_ProjectionTarget"
+    sk = root.sketches.add(plane)
+    sk.name = "Sketch_ProjectedTopEdges"
+
+    proj = sk.project(top_face)
+    print(f"Projected {proj.count} entities onto '{sk.name}' "
+          f"(sketch curves now: {sk.sketchCurves.count})")
+
+
+# =============================================================================
+# DESIGN-20 — Suppress / unsuppress a timeline feature
+#             Run AFTER DESIGN-03. Toggles the Chamfer1 feature and verifies
+#             body.volume changes by the chamfer's removed-material delta.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+    body = root.bRepBodies.itemByName("Bracket")
+    if body is None:
+        print("Bracket not found. Run DESIGN-03 first.")
+        return
+
+    chamfer = next((root.features.item(i) for i in range(root.features.count)
+                    if root.features.item(i).classType().endswith("ChamferFeature")),
+                   None)
+    if chamfer is None:
+        print("No ChamferFeature found.")
+        return
+
+    v_full = body.volume
+    chamfer.isSuppressed = True
+    v_suppressed = body.volume
+    chamfer.isSuppressed = False
+    v_restored = body.volume
+
+    print(f"{chamfer.name}: full={v_full:.4f} → suppressed={v_suppressed:.4f} "
+          f"(+{v_suppressed - v_full:.4f}) → unsuppressed={v_restored:.4f}")
+    print(f"Roundtrip exact: {abs(v_restored - v_full) < 0.0005}")
+
+
+# =============================================================================
+# DESIGN-21 — Combine: cut tool body from target body (boolean subtract)
+#             Builds two overlapping cubes in unused space (X = -20..-14)
+#             and cuts the tool from the target. No dependency on DESIGN-03.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    # Target cube A: 4×4×4 cm at (-20..-16, 0..4, 0..4)
+    skA = root.sketches.add(root.xYConstructionPlane); skA.name = "Sketch_CubeA"
+    skA.sketchCurves.sketchLines.addTwoPointRectangle(
+        adsk.core.Point3D.create(-20.0, 0, 0),
+        adsk.core.Point3D.create(-16.0, 4.0, 0))
+    eA = root.features.extrudeFeatures.createInput(
+        skA.profiles.item(0), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    eA.setDistanceExtent(False, adsk.core.ValueInput.createByReal(4.0))
+    cubeA = root.features.extrudeFeatures.add(eA).bodies.item(0)
+    cubeA.name = "CombineTarget"
+
+    # Tool cube B: overlaps A by 2×2×2 = 8 cm³
+    skB = root.sketches.add(root.xYConstructionPlane); skB.name = "Sketch_CubeB"
+    skB.sketchCurves.sketchLines.addTwoPointRectangle(
+        adsk.core.Point3D.create(-18.0, 2.0, 0),
+        adsk.core.Point3D.create(-14.0, 6.0, 0))
+    eB = root.features.extrudeFeatures.createInput(
+        skB.profiles.item(0), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    eB.startExtent = adsk.fusion.OffsetStartDefinition.create(
+        adsk.core.ValueInput.createByReal(2.0))
+    eB.setDistanceExtent(False, adsk.core.ValueInput.createByReal(4.0))
+    cubeB = root.features.extrudeFeatures.add(eB).bodies.item(0)
+    cubeB.name = "CombineTool"
+
+    tools = adsk.core.ObjectCollection.create()
+    tools.add(cubeB)
+    cmb = root.features.combineFeatures.createInput(cubeA, tools)
+    cmb.operation = adsk.fusion.FeatureOperations.CutFeatureOperation
+    cmb.isKeepToolBodies = False
+    root.features.combineFeatures.add(cmb)
+
+    # Expected: 64 − 8 (overlap) = 56 cm³
+    print(f"CombineTarget after cut: vol={cubeA.volume:.3f} cm³ (expect 56.000)")
+
+
+# =============================================================================
+# DESIGN-22 — Move body (translate + rotate via Matrix3D)
+#             Builds a 2×2×2 cm cube and moves it +3,+3,+1 cm while rotating
+#             45° about Z through its own center. Volume invariant under
+#             rigid motion; bbox should rotate to 2√2 cm wide.
+# =============================================================================
+
+import adsk.core, adsk.fusion, math
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    sk = root.sketches.add(root.xYConstructionPlane); sk.name = "Sketch_MoveCube"
+    sk.sketchCurves.sketchLines.addTwoPointRectangle(
+        adsk.core.Point3D.create(-20.0, 0, 0),
+        adsk.core.Point3D.create(-18.0, 2.0, 0))
+    ein = root.features.extrudeFeatures.createInput(
+        sk.profiles.item(0), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    ein.setDistanceExtent(False, adsk.core.ValueInput.createByReal(2.0))
+    cube = root.features.extrudeFeatures.add(ein).bodies.item(0)
+    cube.name = "MoveCube"
+
+    tf = adsk.core.Matrix3D.create()
+    rot = adsk.core.Matrix3D.create()
+    rot.setToRotation(math.radians(45),
+                      adsk.core.Vector3D.create(0, 0, 1),
+                      adsk.core.Point3D.create(-19.0, 1.0, 1.0))   # cube center
+    trans = adsk.core.Matrix3D.create()
+    trans.translation = adsk.core.Vector3D.create(3.0, 3.0, 1.0)
+    tf.transformBy(rot)
+    tf.transformBy(trans)
+
+    bodies = adsk.core.ObjectCollection.create()
+    bodies.add(cube)
+    mv_in = root.features.moveFeatures.createInput(bodies, tf)
+    mv = root.features.moveFeatures.add(mv_in)
+    mv.name = "Move_Cube_T3R45"
+
+    bb = cube.boundingBox
+    print(f"MoveCube vol={cube.volume:.3f} (expect 8.000), bbox width="
+          f"{max(bb.maxPoint.x - bb.minPoint.x, bb.maxPoint.y - bb.minPoint.y):.3f} "
+          f"(expect ~2.828 = 2√2)")
+
+
+# =============================================================================
+# DESIGN-23 — Split body by a construction plane
+#             Builds a 4×4×4 cm cube and splits it at z=2 into two halves.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    sk = root.sketches.add(root.xYConstructionPlane); sk.name = "Sketch_SplitCube"
+    sk.sketchCurves.sketchLines.addTwoPointRectangle(
+        adsk.core.Point3D.create(-20.0, 0, 0),
+        adsk.core.Point3D.create(-16.0, 4.0, 0))
+    ein = root.features.extrudeFeatures.createInput(
+        sk.profiles.item(0), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    ein.setDistanceExtent(False, adsk.core.ValueInput.createByReal(4.0))
+    cube = root.features.extrudeFeatures.add(ein).bodies.item(0)
+    cube.name = "SplitCube"
+    v_before = cube.volume
+
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(2.0))
+    splitter = root.constructionPlanes.add(cpi)
+    splitter.name = "Plane_SplitMid"
+
+    sp_in = root.features.splitBodyFeatures.createInput(cube, splitter, True)
+    root.features.splitBodyFeatures.add(sp_in).name = "Split_AtMid"
+
+    halves = [b for b in root.bRepBodies if b.name.startswith("SplitCube")]
+    total = sum(b.volume for b in halves)
+    print(f"Split: {len(halves)} bodies, halves={[round(b.volume, 3) for b in halves]}, "
+          f"total={total:.3f} (expect {v_before:.3f})")
+
+
+# =============================================================================
+# DESIGN-24 — Rigid joint between two peg sub-components
+#             Two PegA/PegB occurrences with a rigid joint between PegA's top
+#             face and PegB's bottom face. Note: the joint creates the
+#             constraint relationship but does NOT visually snap geometry —
+#             that's a Joint API behavior. The joint counts/types confirm it.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    def make_peg(name, x_world):
+        occ = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
+        comp = occ.component; comp.name = name
+        sk = comp.sketches.add(comp.xYConstructionPlane)
+        sk.sketchCurves.sketchCircles.addByCenterRadius(
+            adsk.core.Point3D.create(x_world, -15.0, 0), 0.5)   # 10mm Ø
+        ein = comp.features.extrudeFeatures.createInput(
+            sk.profiles.item(0), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+        ein.setDistanceExtent(False, adsk.core.ValueInput.createByReal(2.0))   # 20mm tall
+        comp.features.extrudeFeatures.add(ein)
+        return occ
+
+    occA = make_peg("PegA", -20.0)
+    occB = make_peg("PegB", -16.0)
+    bodyA = occA.bRepBodies.item(0)
+    bodyB = occB.bRepBodies.item(0)
+    topA = next(f for f in bodyA.faces if abs(f.centroid.z - 2.0) < 0.001)
+    botB = next(f for f in bodyB.faces if abs(f.centroid.z - 0.0) < 0.001)
+
+    geomA = adsk.fusion.JointGeometry.createByPlanarFace(
+        topA, None, adsk.fusion.JointKeyPointTypes.CenterKeyPoint)
+    geomB = adsk.fusion.JointGeometry.createByPlanarFace(
+        botB, None, adsk.fusion.JointKeyPointTypes.CenterKeyPoint)
+
+    j_in = root.joints.createInput(geomA, geomB)
+    j_in.setAsRigidJointMotion()
+    joint = root.joints.add(j_in)
+    joint.name = "PegA_to_PegB_rigid"
+
+    print(f"joints={root.joints.count}  type={joint.jointMotion.jointType} "
+          f"(expect 0 = RigidJointType)  name='{joint.name}'")
+
+
+# =============================================================================
+# DESIGN-25 — Thread feature on a cylinder
+#             Builds a 10 mm Ø × 30 mm cylinder and applies an M10×1.5 / 4g6g
+#             external modeled thread, 20 mm thread length.
+#             Quirk #18: ThreadDataQuery.allClasses(isInternal, type, designation)
+#             — isInternal FIRST.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    sk = root.sketches.add(root.xYConstructionPlane); sk.name = "Sketch_ThreadCylinder"
+    sk.sketchCurves.sketchCircles.addByCenterRadius(
+        adsk.core.Point3D.create(-20.0, -20.0, 0), 0.5)
+    ein = root.features.extrudeFeatures.createInput(
+        sk.profiles.item(0), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    ein.setDistanceExtent(False, adsk.core.ValueInput.createByReal(3.0))
+    cyl = root.features.extrudeFeatures.add(ein).bodies.item(0)
+    cyl.name = "ThreadCylinder"
+
+    side_face = next(f for f in cyl.faces if isinstance(f.geometry, adsk.core.Cylinder))
+
+    threads = root.features.threadFeatures
+    q = threads.threadDataQuery
+    cls = list(q.allClasses(False, "ISO Metric profile", "M10x1.5"))[0]   # external
+    info = threads.createThreadInfo(False, "ISO Metric profile", "M10x1.5", cls)
+    faces = adsk.core.ObjectCollection.create(); faces.add(side_face)
+    t_in = threads.createInput(faces, info)
+    t_in.isModeled = True
+    t_in.threadLength = adsk.core.ValueInput.createByReal(2.0)
+    thread = threads.add(t_in)
+    thread.name = "M10_Thread"
+
+    print(f"Thread '{thread.name}' M10x1.5 / {info.threadClass}: "
+          f"cyl faces 3 → {cyl.faces.count}")
+
+
+# =============================================================================
+# DESIGN-26 — Material assignment from the Fusion Material Library
+#             Run AFTER DESIGN-03. Assigns Aluminum 6061 to the Bracket from
+#             the canonical 'Fusion Material Library' (NOT Additive — see #5).
+#             Never fall through to alphabetical-first 'Fusion Additive
+#             Material Library'.
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+    body = root.bRepBodies.itemByName("Bracket")
+    if body is None:
+        print("Bracket not found. Run DESIGN-03 first.")
+        return
+
+    print(f"Bracket material before: {body.material.name}")
+
+    libs = app.materialLibraries
+    material_lib = next((l for l in libs if l.name == "Fusion Material Library"), None)
+    if material_lib is None:
+        print("FAIL: 'Fusion Material Library' not available.")
+        return
+
+    alu = next((m for m in material_lib.materials if "Aluminum 6061" in m.name), None)
+    if alu is None:
+        avail = [m.name for m in material_lib.materials if "Aluminum" in m.name]
+        print(f"FAIL: Aluminum 6061 not in Fusion Material Library. Options: {avail}")
+        return
+
+    body.material = alu
+    print(f"Bracket material after:  {body.material.name}")
+
+
+# =============================================================================
+# DESIGN-27 — Appearance assignment from the Fusion Appearance Library
+#             Run AFTER DESIGN-03. Applies 'Plastic - Glossy (Red)' to the
+#             Bracket body — visual change only (does not affect material/mass).
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+    body = root.bRepBodies.itemByName("Bracket")
+    if body is None:
+        print("Bracket not found. Run DESIGN-03 first.")
+        return
+
+    print(f"Bracket appearance before: {body.appearance.name}")
+
+    app_lib = next(l for l in app.materialLibraries
+                   if l.name == "Fusion Appearance Library")
+    red = next((a for a in app_lib.appearances
+                if "Red" in a.name and "Plastic" in a.name), None)
+    if red is None:
+        red = next((a for a in app_lib.appearances if "Red" in a.name), None)
+    if red is None:
+        print("FAIL: no red appearance available.")
+        return
+
+    body.appearance = red
+    print(f"Bracket appearance after:  {body.appearance.name}")
+
+
+# =============================================================================
+# DESIGN-28 — Surface patch + thicken to solid
+#             Patches a closed rectangle (4×3 cm) on a plane at z=10 cm into
+#             a surface body, then thickens to a 5 mm solid (= 6 cm³).
+# =============================================================================
+
+import adsk.core, adsk.fusion
+
+def run(_context: str):
+    app  = adsk.core.Application.get()
+    des  = adsk.fusion.Design.cast(app.activeProduct)
+    root = des.rootComponent
+
+    cpi = root.constructionPlanes.createInput()
+    cpi.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(10.0))
+    plane = root.constructionPlanes.add(cpi); plane.name = "Plane_PatchBase"
+    sk = root.sketches.add(plane); sk.name = "Sketch_PatchRect"
+    sk.sketchCurves.sketchLines.addTwoPointRectangle(
+        adsk.core.Point3D.create(-20.0, -25.0, 0),
+        adsk.core.Point3D.create(-16.0, -22.0, 0))
+
+    patch_in = root.features.patchFeatures.createInput(
+        sk.profiles.item(0), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    patch = root.features.patchFeatures.add(patch_in)
+    patch.name = "Patch_Rect"
+    surf = patch.bodies.item(0); surf.name = "SurfRect"
+
+    surf_faces = adsk.core.ObjectCollection.create()
+    for f in surf.faces: surf_faces.add(f)
+    th_in = root.features.thickenFeatures.createInput(
+        surf_faces,
+        adsk.core.ValueInput.createByReal(0.5),                          # 5 mm
+        False,
+        adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
+        True)
+    root.features.thickenFeatures.add(th_in).name = "Thicken_Patch_5mm"
+
+    solid = next((b for b in root.bRepBodies if b.isSolid and b.name not in ("Bracket",)),
+                 None)
+    print(f"Patch surface (1 face) → thickened solid: vol={solid.volume if solid else 0:.3f} "
+          f"(expect 6.000 = 4×3×0.5)")
