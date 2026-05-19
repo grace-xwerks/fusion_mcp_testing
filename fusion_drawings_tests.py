@@ -11,13 +11,41 @@ the Design document.
 
 In Fusion 2703.x Insider, Drawings live in their own submodule
 **adsk.drawing** (sibling of adsk.cam and adsk.fusion). This is the
-same drift pattern as CAM — see issues #3 (#27, #28) and #10.
+same drift pattern as CAM — see issues #3 (#27, #28, #29) and #10.
 
 Key classes (from dir(adsk.drawing)):
   Drawing, DrawingDocument, DrawingExportManager, DrawingExportOptions,
   CreateDrawingInput, DrawingCreationModes,
   CustomTable, CustomTableInput, CustomTables,
   ASMESheetSizes, DimensionStrategyTypes, ...
+
+⚠️  RUNTIME STATUS — Fusion 2703.x Insider, May 2026
+============================================================
+The adsk.drawing Python bindings are largely NOT YET IMPLEMENTED on
+this build. Class definitions exist, DrawingDocument.cast(doc) returns
+an instance, but any data-access call raises:
+
+    RuntimeError: 5 : API Function not yet implemented
+
+This affects:
+  - drawing.sheets / .namedViews / .exportManager / .unitsManager
+  - All sheet.drawingViews.* operations
+  - All view.drawingDimensions.* / .drawingNotes.* operations
+  - PDF / DXF export
+
+DRW-01 (workspace check, no data access) does run. DRW-02..21 are
+blocked until Autodesk ships the Python implementation in a future
+Fusion release.
+
+Programmatic drawing creation (DRW-03) is ALSO blocked separately:
+CreateDrawingInput has no public Python factory in this build (#28).
+Manual creation in the UI works (File > New Drawing > From Design)
+but the resulting drawing can't be programmatically inspected per #29.
+
+The scripts below were refactored against the documented adsk.drawing
+class structure so they're ready to validate the moment the bindings
+ship. For now, treat the DRW group as a known-blocked future-work
+section of the library.
 """
 
 # =============================================================================

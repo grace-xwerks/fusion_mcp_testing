@@ -43,6 +43,22 @@ PREREQUISITES:
     or multi-component design). The Bracket + MountingPlate assembly
     from DESIGN-06 works perfectly.
 
+⚠️  RUNTIME STATUS — Fusion 2703.x Insider, May 2026
+============================================================
+The adsk.drawing Python bindings are largely NOT YET IMPLEMENTED on
+this build (see quirks #28, #29 in issue #3). Any deeper access than
+`DrawingDocument.cast(doc)` raises:
+
+    RuntimeError: 5 : API Function not yet implemented
+
+This affects every script in this file. They're refactored against
+the documented adsk.drawing class structure so they're ready to
+validate the moment Autodesk ships the Python implementation, but
+running them today will hit the blocker on the first data access.
+
+Treat as future-work section of the library; revisit on the next
+Fusion release.
+
 No try/except — let exceptions propagate as error signals.
 All positions in centimeters (Fusion internal units).
 """
