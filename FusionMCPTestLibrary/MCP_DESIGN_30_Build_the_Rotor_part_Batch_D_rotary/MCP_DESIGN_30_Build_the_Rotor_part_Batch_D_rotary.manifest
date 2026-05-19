@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Design] DESIGN-30: Build the Rotor part (Batch D rotary stock)",
+  "id": "ea18b2fd-d6e3-5321-bf13-7d2f675d15c0"
+}
