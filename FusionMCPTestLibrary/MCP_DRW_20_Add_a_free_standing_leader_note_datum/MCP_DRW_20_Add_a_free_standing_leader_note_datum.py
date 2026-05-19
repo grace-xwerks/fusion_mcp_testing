@@ -14,11 +14,11 @@ Output via print() — visible in the Text Commands panel (View → Text Command
 Do NOT use try/except — unhandled exceptions are the MCP error signal.
 """
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active.")
@@ -46,17 +46,15 @@ def run(_context: str):
         ),
     ]
 
+    notes_coll = sheet.drawingNotes
+
     for (nx, ny), (lx, ly), text in callouts:
-        note_input = sheet.drawingNotes.createInput(
-            adsk.core.Point3D.create(nx, ny, 0)
-        )
-        note_input.text = text
-        note_input.isLeader = True
+        note_input = notes_coll.createInput(adsk.core.Point3D.create(nx, ny, 0))
+        note_input.text         = text
+        note_input.isLeader     = True
         note_input.leaderPoints = adsk.core.ObjectCollection.create()
         note_input.leaderPoints.add(adsk.core.Point3D.create(lx, ly, 0))
+        notes_coll.add(note_input)
+        print(f"Leader note added: '{text.split(chr(10))[0]}...'  at ({nx*10:.0f}, {ny*10:.0f}) mm")
 
-        note = sheet.drawingNotes.add(note_input)
-        first_line = text.split('\n')[0]
-        print(f"Leader note added: '{first_line}...'  at ({nx*10:.0f}, {ny*10:.0f}) mm")
-
-    print(f"\nTotal notes on sheet: {sheet.drawingNotes.count}")
+    print(f"\nTotal notes on sheet: {notes_coll.count}")

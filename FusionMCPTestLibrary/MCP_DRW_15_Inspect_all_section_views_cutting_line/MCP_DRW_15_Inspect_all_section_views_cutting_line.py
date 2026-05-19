@@ -14,39 +14,33 @@ Output via print() — visible in the Text Commands panel (View → Text Command
 Do NOT use try/except — unhandled exceptions are the MCP error signal.
 """
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active.")
         return
 
     print(f"=== Section View Audit: {drw.parentDocument.name} ===")
+    section_type = adsk.drawing.DrawingViewTypes.SectionDrawingViewType
     total = 0
 
     for s_idx in range(drw.sheets.count):
         sheet = drw.sheets.item(s_idx)
-        sheet_sections = []
-
-        for v_idx in range(sheet.drawingViews.count):
-            v = sheet.drawingViews.item(v_idx)
-            if v.drawingViewType == adsk.fusion.DrawingViewTypes.SectionDrawingViewType:
-                sheet_sections.append(v)
-
-        if sheet_sections:
+        sections = [sheet.drawingViews.item(i) for i in range(sheet.drawingViews.count)
+                    if sheet.drawingViews.item(i).drawingViewType == section_type]
+        if sections:
             print(f"\n  Sheet: {sheet.name}")
-            for sv in sheet_sections:
+            for sv in sections:
                 total += 1
                 print(f"    Section: {sv.name}")
-                print(f"      Label      : {sv.sectionLabel if hasattr(sv, 'sectionLabel') else 'N/A'}")
+                print(f"      Label      : {sv.sectionLabel}")
                 print(f"      Scale      : {sv.scale:.3f}")
-                pos = sv.position
-                print(f"      Position   : ({pos.x*10:.1f}, {pos.y*10:.1f}) mm")
-                # Parent view
-                if hasattr(sv, 'parentView') and sv.parentView:
+                print(f"      Position   : ({sv.position.x*10:.1f}, {sv.position.y*10:.1f}) mm")
+                if sv.parentView:
                     print(f"      Parent view: {sv.parentView.name}")
 
     print(f"\nTotal section views: {total}")

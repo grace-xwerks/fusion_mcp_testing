@@ -27,22 +27,50 @@ def run(_context: str):
     op_input = setup.operations.createInput("contour2d")
     op_input.displayName = "4_Contour_Outside"
 
-    for i in range(cam.documentToolLibrary.count):
-        t = cam.documentToolLibrary.item(i)
-        dia = t.parameters.itemByName('tool_diameter').value * 10
-        if t.typeName == "flat end mill" and 8 <= dia <= 12:
-            op_input.tool = t
-            print(f"Tool: {t.description}  Ø{dia:.1f} mm")
+    # ── Load sample milling tool library ───────────────────────────────────
+    tool_libs  = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    target_url = adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'
+    )
+    library = tool_libs.toolLibraryAtURL(target_url)
+
+    # 8–10 mm flat end mill for outside contour.
+    chosen = None
+    for i in range(library.count):
+        t = library.item(i)
+        p = t.parameters
+        if not p.itemByName('tool_isMill').value.value:
+            continue
+        # Drop taper filter — it's about shank shape, not tip. The
+        # 'flat' check in the description below is the right filter.
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
+        if 8.0 <= dia_mm <= 10.0:
+            chosen = t
             break
 
+    if chosen is None:
+        print("No 8–10 mm flat end mill found in 'Milling Tools (Metric)'.")
+        return
+
+    op_input.tool = chosen
+    print(f"Tool: {chosen.description}  Ø{chosen.parameters.itemByName('tool_diameter').value.value*10:.1f} mm")
+
     params = op_input.parameters
-    params.itemByName("tolerance").value          = adsk.core.ValueInput.createByString("0.01 mm")
-    params.itemByName("maximumStepdown").value    = adsk.core.ValueInput.createByString("5 mm")
-    params.itemByName("stockToLeave").value       = adsk.core.ValueInput.createByString("0 mm")
-    params.itemByName("direction").value          = adsk.core.ValueInput.createByString("climb")
-    # Compensation: CDC (Cutter Diameter Compensation) — standard for contours
-    params.itemByName("compensation").value       = adsk.core.ValueInput.createByString("left")
+    params.itemByName("tolerance").expression       = "0.01 mm"
+    params.itemByName("maximumStepdown").expression = "5 mm"
+    params.itemByName("stockToLeave").expression    = "0 mm"
 
     op = setup.operations.add(op_input)
+
+    # Geometry: body silhouette (outer profile when viewed from above).
+    # CurveSelections.createNewSilhouetteSelection() seeded by the body
+    # produces the outer contour chain automatically — no manual edge picking.
+    bracket = next(b for b in cam.designRootOccurrence.bRepBodies if b.name == 'Bracket')
+    contours_pv = op.parameters.itemByName('contours').value
+    cs = contours_pv.getCurveSelections(); cs.clear()
+    sel = cs.createNewSilhouetteSelection(); sel.inputGeometry = [bracket]
+    contours_pv.applyCurveSelections(cs)
+
+    print(f"Setup: {setup.name}")
     print(f"Operation added: {op.name}  strategy={op.strategy}")
-    print("CDC direction: left (climb milling, outside contour)")
+    print(f"Geometry: Bracket body silhouette (outer 2D contour)")

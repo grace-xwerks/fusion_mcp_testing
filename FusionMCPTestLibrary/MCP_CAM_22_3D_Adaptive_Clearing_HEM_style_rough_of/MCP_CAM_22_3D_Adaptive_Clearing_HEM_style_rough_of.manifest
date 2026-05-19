@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-22: 3D Adaptive Clearing (HEM-style rough of the full Bracket model)",
+  "id": "6b2a6584-cf69-5b9b-a963-72c756eb5e77"
+}

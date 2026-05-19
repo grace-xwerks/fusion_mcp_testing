@@ -14,11 +14,11 @@ Output via print() — visible in the Text Commands panel (View → Text Command
 Do NOT use try/except — unhandled exceptions are the MCP error signal.
 """
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active.")
@@ -26,51 +26,26 @@ def run(_context: str):
 
     sheet = drw.sheets.item(0)
 
-    # Find existing parts list
-    parts_list = None
-    for i in range(sheet.drawingTableViews.count):
-        t = sheet.drawingTableViews.item(i)
-        if t.tableViewType == adsk.fusion.DrawingTableViewTypes.PartsListDrawingTableViewType:
-            parts_list = t
-            break
-
-    if not parts_list:
-        print("No parts list found. Run DRW-17 first.")
+    if sheet.customTables.count == 0:
+        print("No CustomTable on sheet. Run DRW-17 first.")
         return
-
+    # Heuristic: the first CustomTable is the parts list (matches DRW-17 flow).
+    parts_list = sheet.customTables.item(0)
     print(f"Parts list: {parts_list.name}")
-    print(f"Current columns ({parts_list.columnCount}):")
 
-    for col in range(parts_list.columnCount):
-        header = parts_list.cell(0, col)
-        print(f"  [{col}] {header.text}")
+    print(f"Current columns ({parts_list.columns.count}):")
+    for col_idx in range(parts_list.columns.count):
+        print(f"  [{col_idx}] {parts_list.columns.item(col_idx).name}")
 
-    # Standard machining drawing columns — reorder / rename to match
-    # ANSI Y14.35 convention: ITEM | QTY | PART NUMBER | DESCRIPTION | MATERIAL
+    # Standard machining drawing columns — ANSI Y14.35 convention.
     desired_headers = [
-        "ITEM",
-        "QTY",
-        "PART NUMBER",
-        "DESCRIPTION",
-        "MATERIAL",
-        "FINISH",
+        "ITEM", "QTY", "PART NUMBER", "DESCRIPTION", "MATERIAL", "FINISH",
     ]
-
-    # Rename header row cells where the column count allows
-    for col in range(min(parts_list.columnCount, len(desired_headers))):
-        cell = parts_list.cell(0, col)
-        cell.text = desired_headers[col]
-
-    print(f"\nHeaders updated to machining drawing standard (ANSI Y14.35):")
-    for col in range(parts_list.columnCount):
-        print(f"  [{col}] {parts_list.cell(0, col).text}")
-
-    # Set column widths (cm) — ITEM narrow, DESCRIPTION wide
     col_widths = [1.0, 1.2, 3.0, 5.0, 3.0, 2.5]
-    for col in range(min(parts_list.columnCount, len(col_widths))):
-        try:
-            parts_list.setColumnWidth(col, col_widths[col])
-        except Exception:
-            pass  # some columns may not be resizable via API; skip gracefully
+    n = min(parts_list.columns.count, len(desired_headers))
+    for col_idx in range(n):
+        col = parts_list.columns.item(col_idx)
+        col.name  = desired_headers[col_idx]
+        col.width = col_widths[col_idx]
 
-    print("\nColumn widths adjusted.")
+    print(f"\nHeaders/widths updated to machining drawing standard (ANSI Y14.35).")

@@ -14,21 +14,22 @@ Output via print() — visible in the Text Commands panel (View → Text Command
 Do NOT use try/except — unhandled exceptions are the MCP error signal.
 """
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 import os
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active.")
         return
 
+    sheet       = drw.sheets.item(0)
     output_path = os.path.expanduser(f"~/Desktop/{drw.parentDocument.name}_Sheet1.dxf")
 
-    export_mgr  = drw.parentDocument.exportManager
-    dxf_options = export_mgr.createDXFExportOptions()
+    export_mgr  = drw.exportManager
+    dxf_options = export_mgr.createDXFExportOptions(output_path, sheet)
     dxf_options.filename = output_path
 
     export_mgr.execute(dxf_options)

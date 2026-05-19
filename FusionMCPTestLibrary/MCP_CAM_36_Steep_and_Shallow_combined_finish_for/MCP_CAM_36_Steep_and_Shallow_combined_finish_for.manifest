@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-36: Steep and Shallow (combined finish for steep walls + shallow faces)",
+  "id": "7b3a7f26-40ed-53ee-a0b6-38cf5ac5561f"
+}

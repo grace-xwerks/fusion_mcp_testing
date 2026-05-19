@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-26: Contour 3D (constant-Z finish \u2014 wedding-cake terrace pattern)",
+  "id": "c12398be-7fcb-5ffc-8829-99329a34781d"
+}

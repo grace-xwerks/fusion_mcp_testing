@@ -15,6 +15,7 @@ Do NOT use try/except — unhandled exceptions are the MCP error signal.
 """
 
 import adsk.core, adsk.cam
+import time
 
 def run(_context: str):
     app = adsk.core.Application.get()
@@ -25,25 +26,44 @@ def run(_context: str):
 
     setup = cam.setups.item(0)
     print(f"Generating toolpaths for setup: {setup.name}")
-    print(f"Operations to generate: {setup.allOperations.count}")
+    print(f"Operations in setup: {setup.allOperations.count}")
 
-    # Build collection of all operations
-    ops = adsk.core.ObjectCollection.create()
-    for i in range(setup.allOperations.count):
-        ops.add(setup.allOperations.item(i))
+    # generateAllToolpaths(skipValid=True) — only regen invalid/missing paths
+    future = cam.generateAllToolpaths(True)
+    print(f"Operations queued: {future.numberOfOperations}")
 
-    # Generate (synchronous)
-    future = cam.generateToolpaths(ops)
-    # Wait for completion
+    # Block until generation completes; stay defensive even though Fusion
+    # typically serializes the call.
     while not future.isGenerationCompleted:
-        adsk.core.Application.get().userInterface.messageBox("Generating...", "Wait")
-        # Note: in MCP scripts there's no event loop — generation may be sync
-        break
+        time.sleep(0.2)
 
-    print(f"Toolpath generation submitted.")
-    print("Check the Manufacture workspace — toolpaths should appear in green/yellow.")
+    print("Toolpath generation completed.")
 
-    # Report operation statuses
+    # Report per-op status
+    success = 0
+    failed  = 0
     for i in range(setup.allOperations.count):
         op = setup.allOperations.item(i)
-        print(f"  {op.name:35s} hasToolpath={op.hasToolpath}  isValid={op.isValid}")
+        ok = op.hasToolpath
+        if ok:
+            success += 1
+        else:
+            failed += 1
+        print(f"  {op.name:35s} hasToolpath={op.hasToolpath}")
+
+    print(f"\nSuccess: {success}   Failed/unsupported: {failed}")
+
+    # Total cycle time (across all generated ops in this setup)
+    total_seconds = 0.0
+    for i in range(setup.allOperations.count):
+        op = setup.allOperations.item(i)
+        if op.hasToolpath:
+            # Signature: getMachiningTime(op, feedScale, rapidScale, toolChangeTime)
+            # Returned MachiningTime exposes .machiningTime (seconds), .feedDistance
+            # (cm), .rapidDistance (cm), .totalFeedTime, .totalRapidTime,
+            # .toolChangeCount, .totalToolChangeTime — NOT machiningTimeInSeconds.
+            mt = cam.getMachiningTime(op, 1.0, 1.0, 5.0)
+            total_seconds += mt.machiningTime
+
+    print(f"Total cycle time: {total_seconds:.1f} s "
+          f"({total_seconds/60:.2f} min)")

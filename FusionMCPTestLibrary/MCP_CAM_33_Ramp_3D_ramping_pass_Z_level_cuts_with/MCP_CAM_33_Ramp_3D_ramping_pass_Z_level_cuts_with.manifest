@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-33: Ramp (3D ramping pass \u2014 Z-level cuts with smooth descent)",
+  "id": "8cca17ad-246a-508b-9377-198dcba3a6c6"
+}

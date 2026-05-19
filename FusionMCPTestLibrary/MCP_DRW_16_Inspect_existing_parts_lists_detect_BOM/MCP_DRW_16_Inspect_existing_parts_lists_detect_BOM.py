@@ -14,11 +14,11 @@ Output via print() — visible in the Text Commands panel (View → Text Command
 Do NOT use try/except — unhandled exceptions are the MCP error signal.
 """
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing, adsk.fusion
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active.")
@@ -28,26 +28,18 @@ def run(_context: str):
 
     for s_idx in range(drw.sheets.count):
         sheet = drw.sheets.item(s_idx)
-        tables = sheet.drawingTableViews
-
         print(f"\n  Sheet [{s_idx}]: {sheet.name}")
-        print(f"    Table views (parts lists, etc.): {tables.count}")
+        print(f"    Custom tables: {sheet.customTables.count}")
+        for t_idx in range(sheet.customTables.count):
+            tbl = sheet.customTables.item(t_idx)
+            print(f"      [{t_idx}] {tbl.name}  rows={tbl.rows.count}  cols={tbl.columns.count}")
+        print(f"    Balloons: {sheet.drawingBalloons.count}")
+        for b_idx in range(sheet.drawingBalloons.count):
+            b = sheet.drawingBalloons.item(b_idx)
+            print(f"      [{b_idx}] {b.text.formattedText}")
 
-        for t_idx in range(tables.count):
-            tbl = tables.item(t_idx)
-            print(f"      [{t_idx}] {tbl.name}")
-            print(f"        Type    : {tbl.tableViewType}")
-            print(f"        Rows    : {tbl.rowCount}")
-            print(f"        Columns : {tbl.columnCount}")
-
-        # Also check for balloons
-        balloons = sheet.drawingBalloons
-        print(f"    Balloons: {balloons.count}")
-        for b_idx in range(balloons.count):
-            b = balloons.item(b_idx)
-            print(f"      [{b_idx}] {b.text.formattedText if hasattr(b, 'text') else 'balloon'}")
-
-    # Check if referenced design is an assembly (needed for non-trivial BOM)
+    # Check if referenced design is an assembly (needed for non-trivial BOM).
+    # Design itself still lives in adsk.fusion.
     refs = drw.referencedDocuments
     print(f"\n  Referenced documents: {refs.count}")
     for i in range(refs.count):

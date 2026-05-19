@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "engine": "Python",
+  "license": "None",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "author": "Fusion MCP Test Library",
+  "version": "1.0",
+  "editEnabled": true,
+  "description": "[Manufacture] CAM-23: Pocket Clearing (3D pocket rough \u2014 non-adaptive alternative)",
+  "id": "c9021491-9ebf-5a91-b5c6-fa643b9a0efa"
+}

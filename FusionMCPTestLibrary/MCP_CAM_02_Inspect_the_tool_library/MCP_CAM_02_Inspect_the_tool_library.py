@@ -20,25 +20,63 @@ def run(_context: str):
     app = adsk.core.Application.get()
     cam = adsk.cam.CAM.cast(app.activeProduct)
     if not cam:
-        print("Switch to Manufacture workspace first.")
+        print("Switch to Manufacture workspace first (run CAM-01).")
         return
 
-    # Document tool library
-    lib_mgr  = cam.documentToolLibrary
-    print(f"Document tool library tool count: {lib_mgr.count}")
+    # ---- 1. Document tool library ------------------------------------------------
+    # A fresh design has no document-local tools; tools land here once you import
+    # them from a sample/cloud library or add them via the Tool Library dialog.
+    doc_lib = cam.documentToolLibrary
+    print(f"Document tool library tool count: {doc_lib.count}")
+    print("  (expected 0 for a fresh design — tools must be imported first)")
 
-    for i in range(min(lib_mgr.count, 20)):   # cap at 20 for output sanity
-        tool = lib_mgr.item(i)
-        print(f"  [{i:2d}] {tool.description or tool.productId:40s}  "
-              f"dia={tool.parameters.itemByName('tool_diameter').value*10:.2f} mm  "
-              f"type={tool.typeName}")
+    # ---- 2. Walk every LibraryLocation -------------------------------------------
+    # Per quirks #21/#22/#23: use CAMManager.libraryManager.toolLibraries,
+    # urlByLocation (singular), and treat childAssetURLs as a SWIG URLVector
+    # (len() / [i], NOT .count / .item(i)).
+    tl = adsk.cam.CAMManager.get().libraryManager.toolLibraries
 
-    print(f"\n  (Showing up to 20 of {lib_mgr.count})")
+    locations = [
+        ('CloudLibraryLocation',          adsk.cam.LibraryLocations.CloudLibraryLocation),
+        ('ExternalLibraryLocation',       adsk.cam.LibraryLocations.ExternalLibraryLocation),
+        ('Fusion360LibraryLocation',      adsk.cam.LibraryLocations.Fusion360LibraryLocation),
+        ('HubLibraryLocation',            adsk.cam.LibraryLocations.HubLibraryLocation),
+        ('LocalLibraryLocation',          adsk.cam.LibraryLocations.LocalLibraryLocation),
+        ('NetworkLibraryLocation',        adsk.cam.LibraryLocations.NetworkLibraryLocation),
+        ('OnlineSamplesLibraryLocation',  adsk.cam.LibraryLocations.OnlineSamplesLibraryLocation),
+    ]
 
-    # Also report the Fusion sample library path for reference
-    lib_urls = cam.libraryManager.toolLibraries.urlsByFolder(
-        adsk.cam.LibraryFolders.LocalLibraryFolder
-    )
-    print(f"\nLocal library URLs ({lib_urls.count}):")
-    for i in range(lib_urls.count):
-        print(f"  {lib_urls.item(i).toString()}")
+    print("\nLibrary locations:")
+    for label, loc in locations:
+        root = tl.urlByLocation(loc)
+        if not root:
+            print(f"  {label:32s}  (no root URL)")
+            continue
+        assets = tl.childAssetURLs(root)
+        print(f"  {label:32s}  root={root.toString()}  assets={len(assets)}")
+        for i in range(len(assets)):
+            print(f"      [{i}] {assets[i].toString()}")
+
+    # ---- 3. Inspect the two real Fusion sample libraries -------------------------
+    # Quirk #24: 'Cutting Tools (Metric)' has only 3 jet-cutter entries; the real
+    # mill/drill libraries live under different names.
+    sample_urls = [
+        'systemlibraryroot://Samples/Milling Tools (Metric)',
+        'systemlibraryroot://Samples/Hole Making Tools (Metric)',
+    ]
+
+    for sample_url_str in sample_urls:
+        print(f"\nLibrary: {sample_url_str}")
+        sample_url = adsk.core.URL.create(sample_url_str)
+        lib = tl.toolLibraryAtURL(sample_url)
+        if not lib:
+            print("  (could not load)")
+            continue
+        # ToolLibrary IS a Collection — use .count / .item(i) here (quirk #22).
+        print(f"  tool count: {lib.count}")
+        for i in range(min(5, lib.count)):
+            tool = lib.item(i)
+            desc = tool.description or tool.productId or '(no description)'
+            dia_param = tool.parameters.itemByName('tool_diameter')
+            dia_mm = dia_param.value.value * 10 if dia_param else float('nan')
+            print(f"    [{i}] {desc[:50]:50s}  Ø{dia_mm:.2f} mm")
