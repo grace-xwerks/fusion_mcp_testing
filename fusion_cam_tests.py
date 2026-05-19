@@ -124,7 +124,7 @@ def run(_context: str):
             tool = lib.item(i)
             desc = tool.description or tool.productId or '(no description)'
             dia_param = tool.parameters.itemByName('tool_diameter')
-            dia_mm = dia_param.value * 10 if dia_param else float('nan')
+            dia_mm = dia_param.value.value * 10 if dia_param else float('nan')
             print(f"    [{i}] {desc[:50]:50s}  Ø{dia_mm:.2f} mm")
 
 
@@ -229,12 +229,12 @@ def run(_context: str):
     for i in range(mill_lib.count):
         t = mill_lib.item(i)
         is_mill_param = t.parameters.itemByName('tool_isMill')
-        if not is_mill_param or not is_mill_param.value:
+        if not is_mill_param or not is_mill_param.value.value:
             continue
         dia_param = t.parameters.itemByName('tool_diameter')
         if not dia_param:
             continue
-        dia_mm = dia_param.value * 10
+        dia_mm = dia_param.value.value * 10
         if dia_mm < 10:
             continue
         desc = (t.description or '').lower()
@@ -246,7 +246,7 @@ def run(_context: str):
         print("ERROR: No suitable face/flat mill (>=10 mm) found in sample library.")
         return
 
-    dia_mm = chosen_tool.parameters.itemByName('tool_diameter').value * 10
+    dia_mm = chosen_tool.parameters.itemByName('tool_diameter').value.value * 10
     print(f"Tool selected: {chosen_tool.description}  Ø{dia_mm:.2f} mm")
 
     # ---- Create the 2D Facing operation -----------------------------------------
@@ -294,13 +294,13 @@ def run(_context: str):
     for i in range(library.count):
         t = library.item(i)
         p = t.parameters
-        is_mill = p.itemByName('tool_isMill').value
+        is_mill = p.itemByName('tool_isMill').value.value
         if not is_mill:
             continue
         taper = p.itemByName('tool_taperedType')
-        if taper and taper.value not in ('flat', 'straight', ''):
+        if taper and taper.value.value not in ('flat', 'straight', ''):
             continue
-        dia_mm = p.itemByName('tool_diameter').value * 10
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
         if 8.0 <= dia_mm <= 10.0:
             chosen = t
             break
@@ -310,7 +310,7 @@ def run(_context: str):
         return
 
     op_input.tool = chosen
-    print(f"Tool: {chosen.description}  Ø{chosen.parameters.itemByName('tool_diameter').value*10:.1f} mm")
+    print(f"Tool: {chosen.description}  Ø{chosen.parameters.itemByName('tool_diameter').value.value*10:.1f} mm")
 
     params = op_input.parameters
 
@@ -360,12 +360,12 @@ def run(_context: str):
     for i in range(library.count):
         t = library.item(i)
         p = t.parameters
-        if not p.itemByName('tool_isMill').value:
+        if not p.itemByName('tool_isMill').value.value:
             continue
         taper = p.itemByName('tool_taperedType')
-        if taper and taper.value not in ('flat', 'straight', ''):
+        if taper and taper.value.value not in ('flat', 'straight', ''):
             continue
-        dia_mm = p.itemByName('tool_diameter').value * 10
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
         if 5.5 <= dia_mm <= 6.5:
             chosen = t
             break
@@ -375,7 +375,7 @@ def run(_context: str):
         return
 
     op_input.tool = chosen
-    print(f"Tool: {chosen.description}  Ø{chosen.parameters.itemByName('tool_diameter').value*10:.1f} mm")
+    print(f"Tool: {chosen.description}  Ø{chosen.parameters.itemByName('tool_diameter').value.value*10:.1f} mm")
 
     params = op_input.parameters
     params.itemByName("tolerance").expression       = "0.01 mm"
@@ -421,12 +421,12 @@ def run(_context: str):
     for i in range(library.count):
         t = library.item(i)
         p = t.parameters
-        if not p.itemByName('tool_isMill').value:
+        if not p.itemByName('tool_isMill').value.value:
             continue
         taper = p.itemByName('tool_taperedType')
-        if taper and taper.value not in ('flat', 'straight', ''):
+        if taper and taper.value.value not in ('flat', 'straight', ''):
             continue
-        dia_mm = p.itemByName('tool_diameter').value * 10
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
         if 8.0 <= dia_mm <= 10.0:
             chosen = t
             break
@@ -436,7 +436,7 @@ def run(_context: str):
         return
 
     op_input.tool = chosen
-    print(f"Tool: {chosen.description}  Ø{chosen.parameters.itemByName('tool_diameter').value*10:.1f} mm")
+    print(f"Tool: {chosen.description}  Ø{chosen.parameters.itemByName('tool_diameter').value.value*10:.1f} mm")
 
     params = op_input.parameters
     params.itemByName("tolerance").expression       = "0.01 mm"
@@ -483,9 +483,9 @@ def run(_context: str):
         p = t.parameters
         desc = (t.description or '').lower()
         is_drill = p.itemByName('tool_isDrill')
-        if is_drill is None or not is_drill.value:
+        if is_drill is None or not is_drill.value.value:
             continue
-        dia_mm = p.itemByName('tool_diameter').value * 10
+        dia_mm = p.itemByName('tool_diameter').value.value * 10
         if spot is None and ('spot' in desc or 'spotting' in desc) and 3.0 <= dia_mm <= 10.0:
             spot = t
             continue
@@ -498,7 +498,7 @@ def run(_context: str):
     if spot is not None:
         sd_input.tool = spot
         print(f"Spot drill tool: {spot.description}  "
-              f"Ø{spot.parameters.itemByName('tool_diameter').value*10:.2f} mm")
+              f"Ø{spot.parameters.itemByName('tool_diameter').value.value*10:.2f} mm")
     else:
         print("No spot drill found in 'Hole Making Tools (Metric)'.")
         return
@@ -522,7 +522,7 @@ def run(_context: str):
     if drill is not None:
         dr_input.tool = drill
         print(f"Drill tool: {drill.description}  "
-              f"Ø{drill.parameters.itemByName('tool_diameter').value*10:.2f} mm")
+              f"Ø{drill.parameters.itemByName('tool_diameter').value.value*10:.2f} mm")
     else:
         print("No 6 mm drill found in 'Hole Making Tools (Metric)'.")
         return
@@ -569,9 +569,10 @@ def run(_context: str):
     for i in range(sample_lib.count):
         t = sample_lib.item(i)
         is_mill_param = t.parameters.itemByName('tool_isMill')
-        is_mill = bool(is_mill_param.value) if is_mill_param else False
-        desc = (t.parameters.itemByName('tool_description').value
-                if t.parameters.itemByName('tool_description') else
+        is_mill = bool(is_mill_param.value.value) if is_mill_param else False
+        desc_p = t.parameters.itemByName('tool_description')
+        desc = (desc_p.value.value
+                if desc_p else
                 (t.description or ''))
         if is_mill and 'chamfer' in desc.lower():
             chamfer_tool = t
@@ -586,8 +587,8 @@ def run(_context: str):
 
     params = op_input.parameters
     # Chamfer width ≈ Bracket's 1 mm chamfer parameter
-    params.itemByName("chamferWidth").value = adsk.core.ValueInput.createByString("1 mm")
-    params.itemByName("tolerance").value    = adsk.core.ValueInput.createByString("0.01 mm")
+    params.itemByName("chamferWidth").expression = "1 mm"
+    params.itemByName("tolerance").expression    = "0.01 mm"
 
     # TODO(refactor): select the top perimeter edges programmatically and pass
     # them via op_input.parameters.itemByName('chainSelections') / contour
@@ -767,7 +768,7 @@ def run(_context: str):
             # Tool description via the parameter table (quirk #25 — no typeName)
             if op.tool:
                 desc_param = op.tool.parameters.itemByName('tool_description')
-                tool_desc  = desc_param.value if desc_param else (op.tool.description or '(tool)')
+                tool_desc  = desc_param.value.value if desc_param else (op.tool.description or '(tool)')
             else:
                 tool_desc = "(no tool)"
 
