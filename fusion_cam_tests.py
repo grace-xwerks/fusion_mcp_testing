@@ -356,21 +356,46 @@ def run(_context: str):
         return
 
     setup    = cam.setups.item(0)
-    op_input = setup.operations.createInput("contour2d")   # chamfer uses 2D Contour in Fusion
+    # Fusion exposes a dedicated 'chamfer2d' strategy in current API
+    op_input = setup.operations.createInput("chamfer2d")
     op_input.displayName = "6_Chamfer_Top"
 
-    # Chamfer mill or center drill as cutter
-    for i in range(cam.documentToolLibrary.count):
-        t = cam.documentToolLibrary.item(i)
-        if t.typeName in ("chamfer mill", "dovetail mill", "center drill"):
-            op_input.tool = t
-            print(f"Chamfer tool: {t.description}")
+    # Load the Metric Milling Tools sample library (quirk #21, #24)
+    tool_libs = adsk.cam.CAMManager.get().libraryManager.toolLibraries
+    sample_url = adsk.core.URL.create(
+        'systemlibraryroot://Samples/Milling Tools (Metric)'
+    )
+    sample_lib = tool_libs.toolLibraryAtURL(sample_url)
+
+    chamfer_tool = None
+    # ToolLibrary IS a Collection — iterate directly (quirk #22)
+    for i in range(sample_lib.count):
+        t = sample_lib.item(i)
+        is_mill_param = t.parameters.itemByName('tool_isMill')
+        is_mill = bool(is_mill_param.value) if is_mill_param else False
+        desc = (t.parameters.itemByName('tool_description').value
+                if t.parameters.itemByName('tool_description') else
+                (t.description or ''))
+        if is_mill and 'chamfer' in desc.lower():
+            chamfer_tool = t
+            print(f"Chamfer tool: {desc}")
             break
 
+    if chamfer_tool is None:
+        print("No chamfer mill found in 'Milling Tools (Metric)'. Aborting.")
+        return
+
+    op_input.tool = chamfer_tool
+
     params = op_input.parameters
-    params.itemByName("chamfer").value          = adsk.core.ValueInput.createByReal(1)  # enable chamfer mode
-    params.itemByName("chamferWidth").value     = adsk.core.ValueInput.createByString("1 mm")
-    params.itemByName("tolerance").value        = adsk.core.ValueInput.createByString("0.01 mm")
+    # Chamfer width ≈ Bracket's 1 mm chamfer parameter
+    params.itemByName("chamferWidth").value = adsk.core.ValueInput.createByString("1 mm")
+    params.itemByName("tolerance").value    = adsk.core.ValueInput.createByString("0.01 mm")
+
+    # TODO(refactor): select the top perimeter edges programmatically and pass
+    # them via op_input.parameters.itemByName('chainSelections') / contour
+    # selections. Without an explicit geometry selection, the operation will
+    # be created but flagged invalid until edges are picked in the UI.
 
     op = setup.operations.add(op_input)
     print(f"Operation added: {op.name}")
@@ -381,6 +406,7 @@ def run(_context: str):
 # =============================================================================
 
 import adsk.core, adsk.cam
+import time
 
 def run(_context: str):
     app = adsk.core.Application.get()
@@ -391,28 +417,46 @@ def run(_context: str):
 
     setup = cam.setups.item(0)
     print(f"Generating toolpaths for setup: {setup.name}")
-    print(f"Operations to generate: {setup.allOperations.count}")
+    print(f"Operations in setup: {setup.allOperations.count}")
 
-    # Build collection of all operations
-    ops = adsk.core.ObjectCollection.create()
-    for i in range(setup.allOperations.count):
-        ops.add(setup.allOperations.item(i))
+    # generateAllToolpaths(skipValid=True) — only regen invalid/missing paths
+    future = cam.generateAllToolpaths(True)
+    print(f"Operations queued: {future.numberOfOperations}")
 
-    # Generate (synchronous)
-    future = cam.generateToolpaths(ops)
-    # Wait for completion
+    # Block until generation completes; stay defensive even though Fusion
+    # typically serializes the call.
     while not future.isGenerationCompleted:
-        adsk.core.Application.get().userInterface.messageBox("Generating...", "Wait")
-        # Note: in MCP scripts there's no event loop — generation may be sync
-        break
+        time.sleep(0.2)
 
-    print(f"Toolpath generation submitted.")
-    print("Check the Manufacture workspace — toolpaths should appear in green/yellow.")
+    print("Toolpath generation completed.")
 
-    # Report operation statuses
+    # Report per-op status
+    success = 0
+    failed  = 0
     for i in range(setup.allOperations.count):
         op = setup.allOperations.item(i)
-        print(f"  {op.name:35s} hasToolpath={op.hasToolpath}  isValid={op.isValid}")
+        ok = op.hasToolpath
+        if ok:
+            success += 1
+        else:
+            failed += 1
+        print(f"  {op.name:35s} hasToolpath={op.hasToolpath}")
+
+    print(f"\nSuccess: {success}   Failed/unsupported: {failed}")
+
+    # Total cycle time (across all generated ops in this setup)
+    total_seconds = 0.0
+    for i in range(setup.allOperations.count):
+        op = setup.allOperations.item(i)
+        if op.hasToolpath:
+            mt = cam.getMachiningTime(op, 1.0, 1.0)
+            # MachiningTime exposes machiningTimeInSeconds
+            secs = getattr(mt, 'machiningTimeInSeconds', None)
+            if secs is not None:
+                total_seconds += secs
+
+    print(f"Total cycle time: {total_seconds:.1f} s "
+          f"({total_seconds/60:.2f} min)")
 
 
 # =============================================================================
@@ -431,47 +475,71 @@ def run(_context: str):
 
     setup = cam.setups.item(0)
 
-    # Output path — use Fusion's temp folder
-    output_folder = os.path.expanduser("~/Desktop")
-    output_file   = "bracket_op1"
+    # Discover post folders
+    generic_folder  = cam.genericPostFolder
+    personal_folder = cam.personalPostFolder
+    print(f"Generic post folder : {generic_folder}")
+    print(f"Personal post folder: {personal_folder}")
 
-    # Find a Haas post (common in Autodesk library — aligns with CNC Fundamentals course)
-    post_url = None
-    post_libs = cam.libraryManager.postLibraries.urlsByFolder(
-        adsk.cam.LibraryFolders.LocalLibraryFolder
-    )
-    for i in range(post_libs.count):
-        url_str = post_libs.item(i).toString()
-        if "haas" in url_str.lower():
-            post_url = post_libs.item(i)
-            print(f"Post processor: {url_str}")
-            break
+    # Prefer a Haas post in the generic library
+    candidate_paths = [
+        os.path.join(generic_folder, 'haas.cps'),
+        os.path.join(generic_folder, 'haas next generation.cps'),
+        os.path.join(personal_folder, 'haas.cps'),
+    ]
+    post_path = next((p for p in candidate_paths if os.path.isfile(p)), None)
 
-    if not post_url:
-        print("Haas post not found in local library.")
-        print("Available post libraries:")
-        for i in range(post_libs.count):
-            print(f"  {post_libs.item(i).toString()}")
+    if not post_path:
+        print("No Haas post found in expected locations. Candidates checked:")
+        for p in candidate_paths:
+            print(f"  {p}")
+        print("\nGeneric post folder contents:")
+        if os.path.isdir(generic_folder):
+            for fn in sorted(os.listdir(generic_folder))[:50]:
+                print(f"  {fn}")
+        # TODO(refactor): scan subfolders / personal folder more thoroughly,
+        # or accept a post path via script arg.
         return
 
-    post_input                    = adsk.cam.PostProcessInput.create(
-        output_file, post_url, output_folder,
-        adsk.cam.PostProcessOutputUnitOptions.DocumentUnitsOutput
+    print(f"Post processor: {post_path}")
+
+    output_folder = cam.temporaryFolder
+    program_name  = "Bracket"
+
+    pp_input = adsk.cam.PostProcessInput.create(
+        program_name,
+        post_path,
+        output_folder,
+        adsk.cam.PostOutputUnitOptions.DocumentUnitsOutput,
     )
-    post_input.isOpenInEditor = False
+    pp_input.isOpenInEditor = False
 
-    ops = adsk.core.ObjectCollection.create()
-    for i in range(setup.allOperations.count):
-        if setup.allOperations.item(i).hasToolpath:
-            ops.add(setup.allOperations.item(i))
+    # Post the whole setup (new API accepts setup/operation/program directly)
+    ok = cam.postProcess(setup, pp_input)
+    print(f"postProcess returned: {ok}")
 
-    if ops.count == 0:
-        print("No operations with toolpaths. Run CAM-10 first to generate.")
+    # Locate the produced .nc file
+    nc_path = None
+    if os.path.isdir(output_folder):
+        for fn in os.listdir(output_folder):
+            if fn.lower().startswith(program_name.lower()) and fn.lower().endswith(('.nc', '.tap', '.cnc')):
+                nc_path = os.path.join(output_folder, fn)
+                break
+
+    if not nc_path:
+        print(f"Could not locate output .nc under {output_folder}")
         return
 
-    cam.postProcess(ops, post_input)
-    print(f"G-code posted to: {output_folder}/{output_file}.nc")
-    print("Open that file to verify Haas G/M code output.")
+    print(f"G-code output : {nc_path}")
+    with open(nc_path, 'r') as f:
+        lines = f.readlines()
+    print(f"Line count    : {len(lines)}")
+    print("--- first 5 lines ---")
+    for line in lines[:5]:
+        print(line.rstrip())
+    print("--- last 5 lines ---")
+    for line in lines[-5:]:
+        print(line.rstrip())
 
 
 # =============================================================================
@@ -493,13 +561,33 @@ def run(_context: str):
     for s_idx in range(cam.setups.count):
         setup = cam.setups.item(s_idx)
         print(f"\nSetup [{s_idx}]: {setup.name}")
-        print(f"  Operations: {setup.allOperations.count}")
+        print(f"  Operation type : {setup.operationType}")
+        print(f"  Operations     : {setup.allOperations.count}")
 
         for o_idx in range(setup.allOperations.count):
             op = setup.allOperations.item(o_idx)
-            tool_info = ""
+
+            # Tool description via the parameter table (quirk #25 — no typeName)
             if op.tool:
-                dia = op.tool.parameters.itemByName('tool_diameter')
-                tool_info = f"Ø{dia.value*10:.1f}mm {op.tool.typeName}" if dia else op.tool.typeName
-            status = "✓" if op.hasToolpath and op.isValid else "✗"
-            print(f"  {status} [{o_idx}] {op.name:35s}  {op.strategy:20s}  {tool_info}")
+                desc_param = op.tool.parameters.itemByName('tool_description')
+                tool_desc  = desc_param.value if desc_param else (op.tool.description or '(tool)')
+            else:
+                tool_desc = "(no tool)"
+
+            valid = "ok " if op.hasToolpath else "no "
+            print(f"  [{valid}] [{o_idx}] {op.name:35s}  strategy={op.strategy}")
+            print(f"         tool      : {tool_desc}")
+
+            # Pull a couple of common operation parameters if present
+            for pname in ('tolerance', 'stockToLeave', 'stepover',
+                          'maximumStepdown', 'feedrate', 'spindleSpeed',
+                          'spindle_speed'):
+                p = op.parameters.itemByName(pname)
+                if p is None:
+                    continue
+                # Parameter.value is a ValueInput-ish wrapper — try to read it
+                # via .expression which is always a printable string.
+                expr = getattr(p, 'expression', None)
+                if expr is None:
+                    expr = str(getattr(p, 'value', ''))
+                print(f"         {pname:16s}: {expr}")
