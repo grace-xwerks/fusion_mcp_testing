@@ -296,14 +296,17 @@ def run(_context: str):
 
 # =============================================================================
 # DRW-08  Export drawing sheet to PDF
+#         Refactored for Fusion 2703.x: Drawings live in adsk.drawing
+#         (Issue #10 / quirk #27). DrawingExportManager + PDF options
+#         now hang off the adsk.drawing namespace.
 # =============================================================================
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 import os
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active.")
@@ -312,34 +315,48 @@ def run(_context: str):
     sheet       = drw.sheets.item(0)
     output_path = os.path.expanduser(f"~/Desktop/{drw.parentDocument.name}_Sheet1.pdf")
 
-    export_mgr  = drw.parentDocument.exportManager
-    pdf_options = export_mgr.createPDFExportOptions()
+    # TODO(refactor): confirm exportManager is exposed on DrawingDocument or on
+    # the Drawing product itself in 2703.x. dir(adsk.drawing.DrawingDocument)
+    # and dir(drw) should show a DrawingExportManager — adjust accordingly.
+    export_mgr  = drw.exportManager if hasattr(drw, "exportManager") else drw.parentDocument.exportManager
+
+    # TODO(refactor): verify createPDFExportOptions signature on
+    # adsk.drawing.DrawingExportManager — it may now require (filename, sheet)
+    # or (filename) only. Probe dir(export_mgr) to confirm.
+    pdf_options = export_mgr.createPDFExportOptions(output_path, sheet)
     pdf_options.filename = output_path
 
-    # Export all sheets
+    # Export the configured sheet
     export_mgr.execute(pdf_options)
     print(f"PDF exported: {output_path}")
 
 
 # =============================================================================
 # DRW-09  Export drawing to DXF (for 2D manufacturing / laser / waterjet)
+#         Refactored for Fusion 2703.x: adsk.drawing namespace (Issue #10).
 # =============================================================================
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 import os
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active.")
         return
 
+    sheet       = drw.sheets.item(0)
     output_path = os.path.expanduser(f"~/Desktop/{drw.parentDocument.name}_Sheet1.dxf")
 
-    export_mgr  = drw.parentDocument.exportManager
-    dxf_options = export_mgr.createDXFExportOptions()
+    # TODO(refactor): confirm exportManager surface on adsk.drawing.Drawing /
+    # DrawingDocument in 2703.x (see DRW-08 note).
+    export_mgr  = drw.exportManager if hasattr(drw, "exportManager") else drw.parentDocument.exportManager
+
+    # TODO(refactor): verify createDXFExportOptions signature on
+    # adsk.drawing.DrawingExportManager — likely (filename, sheet).
+    dxf_options = export_mgr.createDXFExportOptions(output_path, sheet)
     dxf_options.filename = output_path
 
     export_mgr.execute(dxf_options)
@@ -349,13 +366,15 @@ def run(_context: str):
 
 # =============================================================================
 # DRW-10  Full drawing audit — counts views, dims, notes across all sheets
+#         Refactored for Fusion 2703.x: adsk.drawing namespace (Issue #10).
+#         Read-only port; no behavioural change.
 # =============================================================================
 
-import adsk.core, adsk.fusion
+import adsk.core, adsk.drawing
 
 def run(_context: str):
     app = adsk.core.Application.get()
-    drw = adsk.fusion.Drawing.cast(app.activeProduct)
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
 
     if not drw:
         print("No drawing active.")
@@ -384,3 +403,216 @@ def run(_context: str):
                   f"scale={view.scale:.3f}")
 
     print(f"\nTotals — Views: {total_views}  Dims: {total_dims}  Notes: {total_notes}")
+
+
+# =============================================================================
+# DRW-11  Audit existing views, find parent / projected-view relationships
+#         Probes drawing view parent links (base view -> projected views).
+# =============================================================================
+
+import adsk.core, adsk.drawing
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
+
+    if not drw or drw.sheets.count == 0:
+        print("No drawing active.")
+        return
+
+    for s_idx in range(drw.sheets.count):
+        sheet = drw.sheets.item(s_idx)
+        print(f"\nSheet [{s_idx}]: {sheet.name}  views={sheet.drawingViews.count}")
+
+        for v_idx in range(sheet.drawingViews.count):
+            view = sheet.drawingViews.item(v_idx)
+
+            # TODO(refactor): verify the parent-view attribute name on
+            # adsk.drawing.DrawingView in 2703.x — it may be `parentView`,
+            # `parent`, or exposed via the view's `drawingViewType`. Try
+            # dir(view) and look for parent / base references.
+            parent = None
+            for attr in ("parentView", "parent", "baseView"):
+                if hasattr(view, attr):
+                    parent = getattr(view, attr)
+                    break
+
+            parent_name = parent.name if parent else "<none / base view>"
+            print(f"  View [{v_idx}]: {view.name:25s}  "
+                  f"type={view.drawingViewType}  "
+                  f"parent={parent_name}")
+
+
+# =============================================================================
+# DRW-12  Full section view A-A through the active base view
+#         Cuts straight across the part; produces a section view labelled A-A.
+# =============================================================================
+
+import adsk.core, adsk.drawing
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
+
+    if not drw or drw.sheets.count == 0:
+        print("No drawing active.")
+        return
+
+    sheet = drw.sheets.item(0)
+    if sheet.drawingViews.count == 0:
+        print("No base view to section. Run DRW-04 first.")
+        return
+
+    base_view = sheet.drawingViews.item(0)
+    print(f"Base view: {base_view.name}")
+
+    # TODO(refactor): adsk.drawing.DrawingViews likely exposes
+    # createSectionViewInput(parentView) returning a SectionViewInput. Probe
+    # dir(sheet.drawingViews) for the exact factory name.
+    #
+    # The cutting line for a *full* section A-A is a single straight segment
+    # that crosses the entire base view. The API typically wants either:
+    #   - a list of Point3D defining the cutting-line polyline, or
+    #   - two endpoints + a direction, in the parent view's sheet-space
+    # Geometry must be supplied in cm (Fusion API convention).
+    #
+    # Placeholder cutting line: horizontal through the centre of the base view.
+    # Replace once the actual SectionViewInput surface is confirmed.
+    bbox      = base_view.boundingBox if hasattr(base_view, "boundingBox") else None
+    if bbox:
+        y_mid = (bbox.minPoint.y + bbox.maxPoint.y) / 2.0
+        p_start = adsk.core.Point3D.create(bbox.minPoint.x - 1.0, y_mid, 0)
+        p_end   = adsk.core.Point3D.create(bbox.maxPoint.x + 1.0, y_mid, 0)
+    else:
+        p_start = adsk.core.Point3D.create(5.0, 10.0, 0)
+        p_end   = adsk.core.Point3D.create(12.0, 10.0, 0)
+
+    print(f"Cutting line A-A: {p_start.asArray()} -> {p_end.asArray()}")
+
+    # TODO(refactor): replace the block below with the confirmed call once the
+    # API is introspected, e.g.:
+    #   sec_input = sheet.drawingViews.createSectionViewInput(base_view)
+    #   sec_input.cuttingLinePoints = [p_start, p_end]
+    #   sec_input.identifier        = "A"
+    #   sec_input.position          = adsk.core.Point3D.create(20.0, 10.0, 0)
+    #   sec_view = sheet.drawingViews.addSectionView(sec_input)
+    print("TODO(refactor): section view A-A creation pending live API probe.")
+    print("  Need: dir(sheet.drawingViews) -> createSectionViewInput / addSectionView")
+    print("  Need: dir(<SectionViewInput>)  -> cuttingLinePoints / identifier / position")
+
+
+# =============================================================================
+# DRW-13  Offset section view B-B (multi-segment / stepped cutting line)
+# =============================================================================
+
+import adsk.core, adsk.drawing
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
+
+    if not drw or drw.sheets.count == 0:
+        print("No drawing active.")
+        return
+
+    sheet = drw.sheets.item(0)
+    if sheet.drawingViews.count == 0:
+        print("No base view to section. Run DRW-04 first.")
+        return
+
+    base_view = sheet.drawingViews.item(0)
+    print(f"Base view: {base_view.name}")
+
+    # An offset section uses a stepped (multi-segment) cutting line so the
+    # section plane jogs to catch features that don't lie on one plane.
+    # Three segments => four points.
+    bbox = base_view.boundingBox if hasattr(base_view, "boundingBox") else None
+    if bbox:
+        x_min, x_max = bbox.minPoint.x - 1.0, bbox.maxPoint.x + 1.0
+        y_lo, y_hi   = (bbox.minPoint.y + bbox.maxPoint.y) / 2.0 - 1.0, \
+                       (bbox.minPoint.y + bbox.maxPoint.y) / 2.0 + 1.0
+        x_jog        = (bbox.minPoint.x + bbox.maxPoint.x) / 2.0
+    else:
+        x_min, x_max, x_jog = 5.0, 12.0, 8.5
+        y_lo, y_hi = 9.0, 11.0
+
+    cutting_pts = [
+        adsk.core.Point3D.create(x_min, y_lo, 0),
+        adsk.core.Point3D.create(x_jog, y_lo, 0),
+        adsk.core.Point3D.create(x_jog, y_hi, 0),
+        adsk.core.Point3D.create(x_max, y_hi, 0),
+    ]
+    print(f"Offset cutting line B-B: {len(cutting_pts)} points")
+    for p in cutting_pts:
+        print(f"  {p.asArray()}")
+
+    # TODO(refactor): confirm adsk.drawing.DrawingViews.createSectionViewInput
+    # accepts a multi-point cuttingLinePoints list for offset sections, or if
+    # offset sections use a separate factory (e.g. createOffsetSectionViewInput).
+    # Probe dir(sheet.drawingViews).
+    #
+    # Expected pattern once confirmed:
+    #   sec_input = sheet.drawingViews.createSectionViewInput(base_view)
+    #   sec_input.cuttingLinePoints = cutting_pts
+    #   sec_input.identifier        = "B"
+    #   sec_input.position          = adsk.core.Point3D.create(20.0, 17.0, 0)
+    #   sec_view = sheet.drawingViews.addSectionView(sec_input)
+    print("TODO(refactor): offset section B-B creation pending live API probe.")
+
+
+# =============================================================================
+# DRW-14  Half section view C-C (cutting plane stops at the part centreline)
+# =============================================================================
+
+import adsk.core, adsk.drawing
+
+def run(_context: str):
+    app = adsk.core.Application.get()
+    drw = adsk.drawing.Drawing.cast(app.activeProduct)
+
+    if not drw or drw.sheets.count == 0:
+        print("No drawing active.")
+        return
+
+    sheet = drw.sheets.item(0)
+    if sheet.drawingViews.count == 0:
+        print("No base view to section. Run DRW-04 first.")
+        return
+
+    base_view = sheet.drawingViews.item(0)
+    print(f"Base view: {base_view.name}")
+
+    # Half section: the cutting line goes from the edge of the view to the
+    # part centreline, then turns 90 degrees to exit along the centreline.
+    bbox = base_view.boundingBox if hasattr(base_view, "boundingBox") else None
+    if bbox:
+        x_min  = bbox.minPoint.x - 1.0
+        x_mid  = (bbox.minPoint.x + bbox.maxPoint.x) / 2.0
+        y_mid  = (bbox.minPoint.y + bbox.maxPoint.y) / 2.0
+        y_top  = bbox.maxPoint.y + 1.0
+    else:
+        x_min, x_mid = 5.0, 8.5
+        y_mid, y_top = 10.0, 13.5
+
+    cutting_pts = [
+        adsk.core.Point3D.create(x_min, y_mid, 0),   # left edge, on centreline
+        adsk.core.Point3D.create(x_mid, y_mid, 0),   # to centre
+        adsk.core.Point3D.create(x_mid, y_top, 0),   # up the centreline
+    ]
+    print(f"Half-section cutting line C-C: {len(cutting_pts)} points")
+    for p in cutting_pts:
+        print(f"  {p.asArray()}")
+
+    # TODO(refactor): half sections may be a flag on SectionViewInput
+    # (e.g. sec_input.isHalfSection = True) or a dedicated factory
+    # (createHalfSectionViewInput). Probe dir(sheet.drawingViews) and
+    # dir(<SectionViewInput>) on a live drawing to confirm.
+    #
+    # Expected pattern once confirmed:
+    #   sec_input = sheet.drawingViews.createSectionViewInput(base_view)
+    #   sec_input.cuttingLinePoints = cutting_pts
+    #   sec_input.identifier        = "C"
+    #   sec_input.isHalfSection     = True   # or similar
+    #   sec_input.position          = adsk.core.Point3D.create(20.0, 5.0, 0)
+    #   sec_view = sheet.drawingViews.addSectionView(sec_input)
+    print("TODO(refactor): half section C-C creation pending live API probe.")
