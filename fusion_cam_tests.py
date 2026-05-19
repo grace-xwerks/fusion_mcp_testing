@@ -2909,3 +2909,422 @@ def run(_context: str):
     print(f"\n  createInput OK — params exposed: {oi.parameters.count}")
     op = setup.operations.add(oi)
     print(f"  add OK -> {op.name}  classType={op.classType()}")
+
+
+# =============================================================================
+# Batch E — Multi-axis (5+2 and full simultaneous 5-axis) API-surface demos
+# -----------------------------------------------------------------------------
+# Each script instantiates the strategy via createFromString (works without a
+# setup), prints its metadata, then attempts createInput + add on the active
+# milling setup. Without a 5-axis machine assigned and without the strategy-
+# specific geometry (drive surfaces, guide curves, contact curves) populated,
+# add() may fail or the resulting op won't generate a toolpath. The intent here
+# is to exercise the API surface and capture any new quirks. Promote individual
+# strategies to full-operation tests once a 5-axis machine + rotor / blade /
+# impeller part is wired up.
+# =============================================================================
+
+
+def _multiaxis_demo(strategy: str, label: str):
+    """Helper: instantiate strategy, print flags, try createInput/add."""
+    import adsk.core, adsk.cam
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first."); return
+    strat = adsk.cam.OperationStrategy.createFromString(strategy)
+    print(f"strategy: {strat.name}  /  {strat.title}")
+    print(f"  flags: milling={strat.isMillingStrategy} 3d={strat.is3DStrategy}"
+          f" rotary={strat.isRotaryStrategy} finishing={strat.isFinishingStrategy}"
+          f" allowed={strat.isGenerationAllowed}")
+    print(f"  description: {strat.description}")
+    setup = cam.setups.item(0)
+    try:
+        oi = setup.operations.createInput(strategy)
+        print(f"  createInput OK — params exposed: {oi.parameters.count}")
+        op = setup.operations.add(oi)
+        print(f"  add OK -> {op.name}  classType={op.classType()}")
+        print(f"  (no toolpath until {label} geometry/machine assigned)")
+    except Exception as e:
+        print(f"  createInput/add raised: {e}")
+        print(f"  (likely needs a 5-axis machine + {label})")
+
+
+# =============================================================================
+# CAM-53  3+2 Clearing (three_plus_two) — positional 5-axis roughing
+#         Tilts the WCS to a fixed orientation then runs a 3-axis clearing
+#         pass at that angle. Needs a tilt axis defined on the machine.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _multiaxis_demo('three_plus_two', '5-axis tilt orientation')
+
+
+# =============================================================================
+# CAM-54  Multi-Axis Clearing (multiaxis_roughing)
+#         Simultaneous 5-axis roughing — the tool tilts continuously while
+#         removing bulk material. Demands a 5-axis kinematic post.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _multiaxis_demo('multiaxis_roughing', 'simultaneous 5-axis machine')
+
+
+# =============================================================================
+# CAM-55  Multi-Axis Finishing (multiaxis_finishing)
+#         Surface finishing with continuous tool tilt — common for blades
+#         and impeller flanks.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _multiaxis_demo('multiaxis_finishing', 'finishing drive surface')
+
+
+# =============================================================================
+# CAM-56  Multi-Axis Contour (multi_axis_contour)
+#         Follows a 3D contour curve with tool-axis tilt control.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _multiaxis_demo('multi_axis_contour', 'a 3D drive contour curve')
+
+
+# =============================================================================
+# CAM-57  Multi-Axis Morph (multi_axis_morph)
+#         Morphs toolpath between two guide curves with continuous tilt.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _multiaxis_demo('multi_axis_morph', 'two guide curves + drive surface')
+
+
+# =============================================================================
+# CAM-58  Swarf (swarf)
+#         Flank-milling: the side of the tool sweeps a ruled surface.
+#         Classic 5-axis impeller / blisk strategy.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _multiaxis_demo('swarf', 'a pair of swarf drive surfaces')
+
+
+# =============================================================================
+# CAM-59  Advanced Swarf (advanced_swarf)
+#         Enhanced swarf with extra collision-avoidance + tool-axis smoothing.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _multiaxis_demo('advanced_swarf', 'swarf drive surfaces + check geometry')
+
+
+# =============================================================================
+# Batch F — Probing & Inspection API-surface demos
+# -----------------------------------------------------------------------------
+# Probing strategies need a probe tool loaded (Fusion sample library "Probes"
+# has 6 assets — see CAM-02 / docs/CAM_INVENTORY.md). The scripts attempt
+# createInput + add; toolpath generation depends on populated probe targets.
+# =============================================================================
+
+
+def _probe_demo(strategy: str, label: str):
+    import adsk.core, adsk.cam
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam or cam.setups.count == 0:
+        print("Run CAM-03 first."); return
+    strat = adsk.cam.OperationStrategy.createFromString(strategy)
+    print(f"strategy: {strat.name}  /  {strat.title}")
+    print(f"  description: {strat.description}")
+    print(f"  allowed: {strat.isGenerationAllowed}")
+    setup = cam.setups.item(0)
+    try:
+        oi = setup.operations.createInput(strategy)
+        print(f"  createInput OK — params exposed: {oi.parameters.count}")
+        op = setup.operations.add(oi)
+        print(f"  add OK -> {op.name}  classType={op.classType()}")
+        print(f"  (assign a probe tool + {label} to generate)")
+    except Exception as e:
+        print(f"  createInput/add raised: {e}")
+        print(f"  (likely needs a probe tool + {label})")
+
+
+# =============================================================================
+# CAM-60  Probe WCS (probe)
+#         Probes the part to set/verify the WCS origin before machining.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _probe_demo('probe', 'WCS probing targets (faces/edges)')
+
+
+# =============================================================================
+# CAM-61  Probe Geometry (probe_geometry)
+#         Inspects specific geometry (boss diameter, pocket size, etc.) and
+#         can report or update WCS offsets based on results.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _probe_demo('probe_geometry', 'feature geometry targets')
+
+
+# =============================================================================
+# CAM-62  Inspect Surface (inspect_surface)
+#         Surface-scan inspection cycle — touch-probe sweeps a face and
+#         records deviation vs nominal.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _probe_demo('inspect_surface', 'surfaces to inspect')
+
+
+# =============================================================================
+# Batch G — Turning (lathe) API-surface demos
+# -----------------------------------------------------------------------------
+# Turning strategies require a TurningOperation setup (operationType =
+# adsk.cam.OperationTypes.TurningOperation) with revolved stock. The Bracket
+# part is a milling setup, so createInput typically refuses turning_* there.
+# Each demo:
+#   1. Prints strategy metadata via createFromString.
+#   2. Walks cam.setups looking for a turning setup; if found, attempts
+#      createInput + add on it.
+#   3. If no turning setup exists, logs that as the expected gap.
+# Promote any of these to a full test once a revolved-stock design + turning
+# setup is added to the file (see expansion plan Batch G in CAM_INVENTORY.md).
+# =============================================================================
+
+
+def _turning_demo(strategy: str):
+    import adsk.core, adsk.cam
+    app = adsk.core.Application.get()
+    cam = adsk.cam.CAM.cast(app.activeProduct)
+    if not cam:
+        print("Run CAM-01 first (no CAM product)."); return
+    strat = adsk.cam.OperationStrategy.createFromString(strategy)
+    print(f"strategy: {strat.name}  /  {strat.title}")
+    print(f"  flags: turning={strat.isTurningStrategy}"
+          f" finishing={strat.isFinishingStrategy}"
+          f" allowed={strat.isGenerationAllowed}")
+    print(f"  description: {strat.description}")
+
+    turning_setup = None
+    for i in range(cam.setups.count):
+        s = cam.setups.item(i)
+        try:
+            if s.operationType == adsk.cam.OperationTypes.TurningOperation:
+                turning_setup = s; break
+        except Exception:
+            pass
+    if turning_setup is None:
+        print("  (no Turning setup in this file — add one with a revolved")
+        print("   stock part before promoting this demo to a full test.)")
+        return
+    try:
+        oi = turning_setup.operations.createInput(strategy)
+        print(f"  createInput OK on '{turning_setup.name}' — "
+              f"params exposed: {oi.parameters.count}")
+        op = turning_setup.operations.add(oi)
+        print(f"  add OK -> {op.name}  classType={op.classType()}")
+    except Exception as e:
+        print(f"  createInput/add raised: {e}")
+
+
+# =============================================================================
+# CAM-63  Turning Face (turning_face)
+#         Faces the end of the stock — analogue of milling 'face' for lathe.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_face')
+
+
+# =============================================================================
+# CAM-64  Turning Profile (turning_profile)
+#         Combined rough + finish profile pass along the OD/ID silhouette.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_profile')
+
+
+# =============================================================================
+# CAM-65  Turning Profile Roughing (turning_profile_roughing)
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_profile_roughing')
+
+
+# =============================================================================
+# CAM-66  Turning Profile Finishing (turning_profile_finishing)
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_profile_finishing')
+
+
+# =============================================================================
+# CAM-67  Turning Adaptive Roughing (turning_adaptive_roughing)
+#         Constant chip-load adaptive variant for turning rough.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_adaptive_roughing')
+
+
+# =============================================================================
+# CAM-68  Turning Chamfer (turning_chamfer)
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_chamfer')
+
+
+# =============================================================================
+# CAM-69  Turning Part (turning_part)
+#         Cut-off / part-off operation — separates the finished piece from
+#         remaining bar stock.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_part')
+
+
+# =============================================================================
+# CAM-70  Turning Single Groove (turning_single_groove)
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_single_groove')
+
+
+# =============================================================================
+# CAM-71  Turning Groove Roughing (turning_groove_roughing)
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_groove_roughing')
+
+
+# =============================================================================
+# CAM-72  Turning Groove Finishing (turning_groove_finishing)
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_groove_finishing')
+
+
+# =============================================================================
+# CAM-73  Turning Groove (profile) (turning_profile_groove)
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_profile_groove')
+
+
+# =============================================================================
+# CAM-74  Turning Thread (turning_thread)
+#         Single-point threading cycle — multi-pass infeed at thread pitch.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_thread')
+
+
+# =============================================================================
+# CAM-75  Turning Trace (turning_trace)
+#         Follows an explicit curve on the turning profile.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_trace')
+
+
+# =============================================================================
+# CAM-76  Turning Stock Transfer (turning_stock_transfer)
+#         Hand-off between main spindle and subspindle (or chuck flip).
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('turning_stock_transfer')
+
+
+# =============================================================================
+# CAM-77  Subspindle Grab (subspindle_grab)
+#         Subspindle picks up the part from the main spindle.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('subspindle_grab')
+
+
+# =============================================================================
+# CAM-78  Subspindle Return (subspindle_return)
+#         Subspindle hands the part back to the main spindle.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('subspindle_return')
+
+
+# =============================================================================
+# CAM-79  Bar Pull (bar_pull)
+#         Bar-feeder advance — pulls a new length of stock through the
+#         spindle collet between cycles.
+# =============================================================================
+
+import adsk.core, adsk.cam
+
+def run(_context: str):
+    _turning_demo('bar_pull')
